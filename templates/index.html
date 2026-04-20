@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SentrySpeed — Traffic Analyzer</title>
+  <meta name="description" content="AI-powered traffic analysis: vehicle detection, speed estimation, and license plate recognition with real-time insights." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <!-- ─── PARTICLES ─────────────────────────────────────────── -->
+  <div id="particles" aria-hidden="true"></div>
+
+  <!-- ─── HEADER ───────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-icon">🚦</span>
+        <span class="brand-name">SentrySpeed</span>
+        <span class="brand-tag">v2.0</span>
+      </div>
+      <div class="header-badges">
+        <span class="badge badge-live" id="systemStatus">● ONLINE</span>
+        <span class="badge badge-info" id="dbBadge">DB Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── STATS ROW ─────────────────────────────────────────── -->
+  <section class="stats-row" aria-label="Summary statistics">
+    <div class="stat-card" id="statTotalVehicles">
+      <div class="stat-icon">🚗</div>
+      <div class="stat-value" id="totalVehiclesVal">0</div>
+      <div class="stat-label">Total Vehicles</div>
+    </div>
+    <div class="stat-card" id="statAvgSpeed">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-value" id="avgSpeedVal">0</div>
+      <div class="stat-label">Avg Speed (km/h)</div>
+    </div>
+    <div class="stat-card" id="statPlates">
+      <div class="stat-icon">🔢</div>
+      <div class="stat-value" id="platesVal">0</div>
+      <div class="stat-label">Plates Detected</div>
+    </div>
+    <div class="stat-card stat-danger" id="statOverspeed">
+      <div class="stat-icon">⚠️</div>
+      <div class="stat-value" id="overspeedVal">0</div>
+      <div class="stat-label">Overspeed Events</div>
+    </div>
+  </section>
+
+  <!-- ─── MAIN CONTENT ──────────────────────────────────────── -->
+  <main class="main-content">
+
+    <!-- Left Panel: Tabs -->
+    <div class="panel panel-left">
+
+      <!-- Tab Nav -->
+      <nav class="tab-nav" role="tablist">
+        <button class="tab-btn active" id="tabUpload" role="tab" aria-selected="true" aria-controls="panelUpload" onclick="TabManager.show('upload')">
+          📤 Upload Video
+        </button>
+        <button class="tab-btn" id="tabCamera" role="tab" aria-selected="false" aria-controls="panelCamera" onclick="TabManager.show('camera')">
+          📷 Live Camera
+        </button>
+        <button class="tab-btn" id="tabHistory" role="tab" aria-selected="false" aria-controls="panelHistory" onclick="TabManager.show('history')">
+          📋 History
+        </button>
+      </nav>
+
+      <!-- Upload Panel -->
+      <div class="tab-panel active" id="panelUpload" role="tabpanel">
+        <div class="drop-zone" id="dropZone"
+             ondragover="FileUploader.onDragOver(event)"
+             ondragleave="FileUploader.onDragLeave(event)"
+             ondrop="FileUploader.onDrop(event)"
+             onclick="document.getElementById('fileInput').click()">
+          <div class="drop-icon">📁</div>
+          <p class="drop-title">Drop video here or click to browse</p>
+          <p class="drop-hint">Supported: MP4, AVI, MOV, MKV — max 2GB</p>
+          <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none" onchange="FileUploader.onFileSelect(event)" />
+        </div>
+
+        <!-- Upload Progress -->
+        <div class="progress-block hidden" id="uploadProgress">
+          <div class="progress-label">
+            <span id="uploadStatusText">Uploading…</span>
+            <span id="uploadPct">0%</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="uploadBar"></div>
+          </div>
+        </div>
+
+        <!-- Processing Progress -->
+        <div class="progress-block hidden" id="procProgress">
+          <div class="progress-label">
+            <span id="procStatusText">Processing…</span>
+            <span id="procPct">0%</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill glow" id="procBar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Camera Panel -->
+      <div class="tab-panel" id="panelCamera" role="tabpanel">
+        <div class="camera-controls">
+          <div class="control-group">
+            <label for="cameraSource">Camera Source:</label>
+            <input type="text" id="cameraSource" placeholder="0 (or http://192.168.1.x:8080/video)" value="0" />
+            <small>Use 0 for laptop camera, or paste your phone camera URL</small>
+          </div>
+          <button class="btn btn-primary" id="btnStartCam" onclick="CameraManager.start()">▶ Start Camera</button>
+          <button class="btn btn-danger" id="btnStopCam" onclick="CameraManager.stop()" disabled>■ Stop</button>
+        </div>
+        <div class="camera-frame" id="cameraFrame">
+          <img id="cameraStream" src="" alt="Live camera feed" class="hidden" />
+          <div class="camera-placeholder" id="cameraPlaceholder">
+            <span>Camera inactive</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- History Panel -->
+      <div class="tab-panel" id="panelHistory" role="tabpanel">
+        <button class="btn btn-secondary btn-sm" onclick="HistoryManager.refresh()">↻ Refresh</button>
+        <div id="historyList" class="history-list">
+          <p class="muted">No videos processed yet.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel: Results -->
+    <div class="panel panel-right" id="resultsPanel">
+      <h2 class="panel-title">
+        Analysis Results
+        <span class="panel-title-badge" id="resultVideoId"></span>
+      </h2>
+
+      <!-- Analytics cards -->
+      <div class="analytics-grid" id="analyticsGrid">
+        <div class="ana-card">
+          <span class="ana-label">Cars</span>
+          <span class="ana-value" id="anaCars">—</span>
+        </div>
+        <div class="ana-card">
+          <span class="ana-label">Trucks</span>
+          <span class="ana-value" id="anaTrucks">—</span>
+        </div>
+        <div class="ana-card">
+          <span class="ana-label">Buses</span>
+          <span class="ana-value" id="anaBuses">—</span>
+        </div>
+        <div class="ana-card">
+          <span class="ana-label">Bikes</span>
+          <span class="ana-value" id="anaBikes">—</span>
+        </div>
+        <div class="ana-card ana-danger">
+          <span class="ana-label">Overspeed %</span>
+          <span class="ana-value" id="anaOverPct">—</span>
+        </div>
+        <div class="ana-card">
+          <span class="ana-label">Max Speed</span>
+          <span class="ana-value" id="anaMaxSpeed">—</span>
+        </div>
+      </div>
+
+      <!-- Download buttons -->
+      <div class="download-row" id="downloadRow" style="display:none">
+        <button class="btn btn-primary" id="btnDownloadExcel" onclick="Downloader.excel()">
+          📊 Download Excel
+        </button>
+        <button class="btn btn-secondary" id="btnDownloadVideo" onclick="Downloader.video()">
+          🎬 Download Video
+        </button>
+      </div>
+
+      <!-- Vehicle table -->
+      <div class="table-wrapper" id="tableWrapper">
+        <table class="vehicle-table" id="vehicleTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Type</th>
+              <th>Plate</th>
+              <th>Avg Speed</th>
+              <th>Max Speed</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="vehicleTableBody">
+            <tr><td colspan="6" class="empty-row">No results yet. Upload a video to begin.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ─── NOTIFICATION TOAST ────────────────────────────────── -->
+  <div id="toastContainer" aria-live="polite"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
