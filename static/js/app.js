@@ -541,22 +541,6 @@ const CameraManager = {
       NotificationSystem.error('Stop failed: ' + err.message);
     }
   },
-      if (this.statsInterval) {
-        clearInterval(this.statsInterval);
-        this.statsInterval = null;
-      }
-      await API.stopCamera();
-      const img = document.getElementById('cameraStream');
-      img.src = '';
-      img.classList.add('hidden');
-      document.getElementById('cameraPlaceholder').classList.remove('hidden');
-      document.getElementById('btnStartCam').disabled = false;
-      document.getElementById('btnStopCam').disabled = true;
-      NotificationSystem.info('Camera stream stopped.');
-    } catch (err) {
-      NotificationSystem.error('Failed to stop camera: ' + err.message);
-    }
-  },
 };
 
 // ── Vehicle Detail Modal ──────────────────────────────────────

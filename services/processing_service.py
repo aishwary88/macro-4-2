@@ -200,28 +200,67 @@ def _run_camera_loop(camera_source) -> None:
             camera_index.startswith("http") or camera_index.startswith("rtsp")
         )
 
-        # Phone/IP cameras: try FFMPEG backend first (better MJPEG support)
+        # Phone/IP cameras: try multiple backends in order
         if is_url:
             logger.info(f"Connecting to IP/phone camera: {camera_index}")
-            cap = cv2.VideoCapture(camera_index, cv2.CAP_FFMPEG)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            time.sleep(0.8)  # give FFMPEG time to connect
-            if not cap.isOpened():
-                cap.release()
-                cap = cv2.VideoCapture(camera_index)  # fallback to default
+            cap = None
+
+            # Attempt 1: FFMPEG backend (best for MJPEG streams)
+            try:
+                cap = cv2.VideoCapture(camera_index, cv2.CAP_FFMPEG)
                 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                time.sleep(0.5)
+                time.sleep(1.0)
+                ret, _ = cap.read()
+                if not ret:
+                    cap.release()
+                    cap = None
+                    logger.warning("FFMPEG backend failed, trying default...")
+            except Exception:
+                if cap: cap.release()
+                cap = None
+
+            # Attempt 2: Default backend
+            if cap is None:
+                try:
+                    cap = cv2.VideoCapture(camera_index)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    time.sleep(0.8)
+                    ret, _ = cap.read()
+                    if not ret:
+                        cap.release()
+                        cap = None
+                        logger.warning("Default backend failed, trying /shot.jpg...")
+                except Exception:
+                    if cap: cap.release()
+                    cap = None
+
+            # Attempt 3: IP Webcam /shot.jpg single-frame endpoint
+            if cap is None:
+                base = camera_index.rsplit('/', 1)[0]
+                shot_url = base + '/shot.jpg'
+                try:
+                    cap = cv2.VideoCapture(shot_url)
+                    time.sleep(0.5)
+                    ret, _ = cap.read()
+                    if not ret:
+                        cap.release()
+                        cap = None
+                except Exception:
+                    if cap: cap.release()
+                    cap = None
+
+            if cap is None:
+                logger.error(
+                    f"Cannot connect to phone camera: '{camera_source}'\n"
+                    f"  1. IP Webcam app mein 'Start Server' tap karo\n"
+                    f"  2. Browser mein test karo: {camera_index}\n"
+                    f"  3. Phone aur laptop same WiFi pe hone chahiye\n"
+                    f"  4. URL format: http://IP:PORT/video"
+                )
+                _camera_active = False
+                return
         else:
             cap = cv2.VideoCapture(camera_index)
-
-        if not cap.isOpened():
-            logger.error(
-                f"Cannot open camera: '{camera_source}'. "
-                f"Phone camera: ensure IP Webcam app is running, "
-                f"same WiFi, correct URL (e.g. http://192.168.x.x:8080/video)"
-            )
-            _camera_active = False
-            return
 
         # ── Detect real FPS from capture ──────────────────────────────
         real_fps = cap.get(cv2.CAP_PROP_FPS)
