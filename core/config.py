@@ -49,6 +49,18 @@ class Settings:
     CAMERA_FPS: int = int(os.getenv("CAMERA_FPS", "60"))
     CAMERA_FRAME_SKIP: int = int(os.getenv("CAMERA_FRAME_SKIP", "0"))
 
+    # ── Performance tuning ────────────────────────────────────────────
+    # Process 1 out of every N frames for detection (1 = every frame)
+    # Higher = faster but less accurate speed measurement
+    DETECT_EVERY_N_FRAMES: int = int(os.getenv("DETECT_EVERY_N_FRAMES", "2"))
+
+    # Resize input frames before detection (0 = no resize)
+    # e.g. 640 means resize width to 640px keeping aspect ratio
+    PROCESS_WIDTH: int = int(os.getenv("PROCESS_WIDTH", "640"))
+
+    # OCR runs at most once every N frames per vehicle (on top of ANPR_FRAME_INTERVAL)
+    OCR_EVERY_N_FRAMES: int = int(os.getenv("OCR_EVERY_N_FRAMES", "15"))
+
     @classmethod
     def ensure_directories(cls):
         """Create all required directories if they don't exist."""

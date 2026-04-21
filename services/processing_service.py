@@ -251,9 +251,40 @@ def _run_camera_loop(camera_source) -> None:
 
         frame_num = 0
         frame_interval = 1.0 / real_fps
+        detect_every   = max(1, settings.DETECT_EVERY_N_FRAMES)
         last_process_time = time.time()
         last_stats_update = time.time()
         last_cleanup_time = time.time()
+
+        # Compute processing resolution
+        proc_w = settings.PROCESS_WIDTH
+        if proc_w > 0 and frame_w > proc_w:
+            cam_scale = proc_w / frame_w
+            proc_h    = int(frame_h * cam_scale)
+        else:
+            cam_scale = 1.0
+            proc_w    = frame_w
+            proc_h    = frame_h
+
+        # Re-set ROI lines for actual processing resolution
+        line_a_y = int(proc_h * 0.35)
+        line_b_y = int(proc_h * 0.65)
+        roi_mgr.set_lines(line_a_y, line_b_y)
+        roi_mgr.frame_width = proc_w
+        calibrator.compute_pixels_per_meter(line_a_y, line_b_y, settings.ROI_DISTANCE_METERS)
+
+        # ANPR components for camera
+        from modules.anpr.plate_detector import PlateDetector as _PD
+        from modules.anpr.plate_reader import PlateReader as _PR
+        plate_detector_cam = _PD()
+        plate_reader_cam   = _PR()
+
+        logger.info(
+            f"Camera loop started: source={camera_source}, "
+            f"input={frame_w}x{frame_h}, proc={proc_w}x{proc_h}, "
+            f"fps={real_fps:.1f}, detect_every={detect_every}, "
+            f"ROI A={line_a_y}px B={line_b_y}px, dist={settings.ROI_DISTANCE_METERS}m"
+        )
 
         # Wait for first frame
         for _ in range(50):
@@ -277,29 +308,65 @@ def _run_camera_loop(camera_source) -> None:
                 continue
             frame = frame.copy()
 
-            # ── Timestamp based on real wall-clock time ───────────────
+            # ── Frame skip ────────────────────────────────────────────
+            frame_num += 1
+            if frame_num % detect_every != 0:
+                # Still encode and serve the raw frame so stream stays smooth
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                with _camera_lock:
+                    _current_frame = buf.tobytes()
+                continue
+
             timestamp = frame_num / real_fps
 
+            # ── Resize for detection ──────────────────────────────────
+            if cam_scale < 1.0:
+                small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_LINEAR)
+            else:
+                small = frame
+
             # ── Detection + Tracking ──────────────────────────────────
-            detections = detector.detect(frame)
-            tracked    = tracker.update(detections)
+            detections  = detector.detect(small)
+            tracked     = tracker.update(detections)
             current_ids = {v.vehicle_id for v in tracked}
 
             # ── Per-vehicle state update ──────────────────────────────
             for v in tracked:
                 vid    = v.vehicle_id
                 center = bbox_center(v.bbox)
-                bottom = bbox_bottom_center(v.bbox)
 
                 state_mgr.update_position(vid, center, timestamp, v.bbox, v.confidence)
                 state_mgr.set_vehicle_type(vid, classifier.classify(v.class_name))
 
-                # Speed via ROI line crossing (uses bottom-center for accuracy)
+                # Speed via ROI line crossing
                 prev_pos = state_mgr.get_previous_position(vid)
                 if prev_pos is not None:
                     speed_data = speed_estimator.update(vid, prev_pos, center, timestamp)
                     if speed_data and speed_data.speed_kmh is not None:
                         state_mgr.set_speed(vid, speed_data.speed_kmh)
+
+                # ANPR — throttled per vehicle
+                vstate = state_mgr.get_vehicle(vid)
+                if (
+                    vstate is not None
+                    and vstate.frame_count >= 5
+                    and vstate.plate_confidence < 0.85
+                    and frame_num % settings.OCR_EVERY_N_FRAMES == 0
+                ):
+                    # Crop from original frame for best quality
+                    if cam_scale < 1.0:
+                        x1 = int(v.bbox[0] / cam_scale); y1 = int(v.bbox[1] / cam_scale)
+                        x2 = int(v.bbox[2] / cam_scale); y2 = int(v.bbox[3] / cam_scale)
+                    else:
+                        x1, y1, x2, y2 = [int(c) for c in v.bbox]
+                    fh, fw = frame.shape[:2]
+                    crop = frame[max(0,y1):min(fh,y2), max(0,x1):min(fw,x2)]
+                    if crop.size > 0:
+                        plate_img = plate_detector_cam.detect(crop)
+                        if plate_img is not None:
+                            plate_data = plate_reader_cam.read_plate(plate_img)
+                            if plate_data:
+                                state_mgr.set_plate(vid, plate_data.plate_number, plate_data.confidence)
 
             # ── Cleanup stale tracks every 2 seconds ──────────────────
             if now - last_cleanup_time >= 2.0:
@@ -309,12 +376,13 @@ def _run_camera_loop(camera_source) -> None:
                 )
                 last_cleanup_time = now
 
-            # ── Render annotated frame ────────────────────────────────
+            # ── Render on original frame ──────────────────────────────
             annotated = renderer.draw(
                 frame, state_mgr,
                 roi_manager=roi_mgr,
                 frame_number=frame_num,
                 video_fps=real_fps,
+                bbox_scale=1.0 / cam_scale if cam_scale < 1.0 else 1.0,
             )
 
             _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75])
@@ -325,8 +393,6 @@ def _run_camera_loop(camera_source) -> None:
             if now - last_stats_update >= 0.5:
                 ProcessingService._update_camera_stats(state_mgr)
                 last_stats_update = now
-
-            frame_num += 1
 
         # ── Cleanup ───────────────────────────────────────────────────
         _reader_active[0] = False

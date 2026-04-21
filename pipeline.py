@@ -100,12 +100,29 @@ class TrafficPipeline:
         height = info.height
         total_frames = info.total_frames
 
-        # Update ROI line positions based on real frame height
-        self.roi_manager.set_lines(
-            line_a_y=int(height * 0.35),
-            line_b_y=int(height * 0.65),
+        # ── Compute processing resolution ─────────────────────────────
+        proc_w = settings.PROCESS_WIDTH
+        if proc_w > 0 and width > proc_w:
+            scale    = proc_w / width
+            proc_h   = int(height * scale)
+        else:
+            scale    = 1.0
+            proc_w   = width
+            proc_h   = height
+
+        detect_every = max(1, settings.DETECT_EVERY_N_FRAMES)
+        logger.info(
+            f"Pipeline config: detect_every={detect_every} frames, "
+            f"proc_size={proc_w}x{proc_h} (scale={scale:.2f}), "
+            f"ocr_interval={settings.OCR_EVERY_N_FRAMES}"
         )
-        self.roi_manager.frame_width = width
+
+        # Update ROI line positions based on PROCESSING height (not original)
+        self.roi_manager.set_lines(
+            line_a_y=int(proc_h * 0.35),
+            line_b_y=int(proc_h * 0.65),
+        )
+        self.roi_manager.frame_width = proc_w
 
         # Setup output video
         os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
@@ -120,22 +137,36 @@ class TrafficPipeline:
         try:
             for frame_obj in extract_frames(video_path):
                 frame_num = frame_obj.frame_id
-                frame = frame_obj.image
                 timestamp = frame_obj.timestamp
-                
-                # ── Detection ──
-                detections = self.detector.detect(frame)
 
-                # ── Tracking ──
+                # ── Frame skip: only process every N frames ───────────
+                # Still write every frame to output video for smooth playback
+                if frame_num % detect_every != 0:
+                    # Write original frame (no annotation) to keep video smooth
+                    writer.write(frame_obj.image)
+                    continue
+
+                frame = frame_obj.image
+
+                # ── Resize for faster processing ──────────────────────
+                if scale < 1.0:
+                    small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_LINEAR)
+                else:
+                    small = frame
+
+                # ── Detection ──────────────────────────────────────────
+                detections = self.detector.detect(small)
+
+                # ── Tracking ───────────────────────────────────────────
                 tracked_vehicles = self.tracker.update(detections)
                 current_ids = {v.vehicle_id for v in tracked_vehicles}
 
-                # ── Per-vehicle processing ──
+                # ── Per-vehicle processing ─────────────────────────────
                 for vehicle in tracked_vehicles:
-                    vid = vehicle.vehicle_id
+                    vid    = vehicle.vehicle_id
                     center = bbox_center(vehicle.bbox)
 
-                    # Update state
+                    # Update state (positions in proc-space coords)
                     self.state_manager.update_position(
                         vid, center, timestamp, vehicle.bbox, vehicle.confidence
                     )
@@ -153,33 +184,62 @@ class TrafficPipeline:
                         if speed_data and speed_data.speed_kmh is not None:
                             self.state_manager.set_speed(vid, speed_data.speed_kmh)
 
-                    # ANPR (throttled, only on stable frames)
-                    if self.state_manager.is_good_frame_for_ocr(vid):
-                        # Crop vehicle region
-                        x1, y1, x2, y2 = vehicle.bbox
-                        vehicle_crop = frame[int(y1):int(y2), int(x1):int(x2)]
-                        plate_img = self.plate_detector.detect(vehicle_crop)
-                        if plate_img is not None:
-                            plate_data = self.plate_reader.read_plate(plate_img)
-                            if plate_data:
-                                self.state_manager.set_plate(
-                                    vid, plate_data.plate_number, plate_data.confidence
-                                )
+                    # ANPR — throttled: only on stable frames, every OCR_EVERY_N_FRAMES
+                    state = self.state_manager.get_vehicle(vid)
+                    if (
+                        state is not None
+                        and state.frame_count >= 5
+                        and state.plate_confidence < 0.85
+                        and frame_num % settings.OCR_EVERY_N_FRAMES == 0
+                    ):
+                        # Crop from ORIGINAL frame for best OCR quality
+                        if scale < 1.0:
+                            x1 = int(vehicle.bbox[0] / scale)
+                            y1 = int(vehicle.bbox[1] / scale)
+                            x2 = int(vehicle.bbox[2] / scale)
+                            y2 = int(vehicle.bbox[3] / scale)
+                        else:
+                            x1, y1, x2, y2 = [int(c) for c in vehicle.bbox]
 
-                # Cleanup stale tracks — use large age so vehicles aren't lost before _save_results
+                        h_orig, w_orig = frame.shape[:2]
+                        x1 = max(0, x1); y1 = max(0, y1)
+                        x2 = min(w_orig, x2); y2 = min(h_orig, y2)
+                        vehicle_crop = frame[y1:y2, x1:x2]
+
+                        if vehicle_crop.size > 0:
+                            plate_img = self.plate_detector.detect(vehicle_crop)
+                            if plate_img is not None:
+                                plate_data = self.plate_reader.read_plate(plate_img)
+                                if plate_data:
+                                    self.state_manager.set_plate(
+                                        vid, plate_data.plate_number, plate_data.confidence
+                                    )
+
+                # Cleanup stale tracks
                 self.state_manager.cleanup_stale(
-                    max_age_frames=999999,  # video: keep all tracks until end
+                    max_age_frames=999999,
                     current_vehicle_ids=current_ids,
                 )
 
-                # ── Render ──
-                annotated = self.renderer.draw(
-                    frame,
-                    self.state_manager,
-                    roi_manager=self.roi_manager,
-                    frame_number=frame_num,
-                    video_fps=fps,
-                )
+                # ── Render on original-size frame ──────────────────────
+                # Scale bboxes back to original resolution for rendering
+                if scale < 1.0:
+                    annotated = self.renderer.draw(
+                        frame,
+                        self.state_manager,
+                        roi_manager=self.roi_manager,
+                        frame_number=frame_num,
+                        video_fps=fps,
+                        bbox_scale=1.0 / scale,
+                    )
+                else:
+                    annotated = self.renderer.draw(
+                        frame,
+                        self.state_manager,
+                        roi_manager=self.roi_manager,
+                        frame_number=frame_num,
+                        video_fps=fps,
+                    )
                 writer.write(annotated)
 
                 # Progress update
