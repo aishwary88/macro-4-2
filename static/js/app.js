@@ -10,7 +10,7 @@
 // ── State ──────────────────────────────────────────────────────
 const AppState = {
   currentVideoId: null,
-  pollerTimer:    null,
+  pollerTimer: null,
 };
 
 // ── API helpers ────────────────────────────────────────────────
@@ -22,16 +22,16 @@ const API = {
     if (!resp.ok) throw new Error((await resp.json()).detail || 'Upload failed');
     return resp.json();
   },
-  async status(videoId)   { return (await fetch(`/api/status/${videoId}`)).json(); },
-  async results(videoId)  { return (await fetch(`/api/results/${videoId}`)).json(); },
+  async status(videoId) { return (await fetch(`/api/status/${videoId}`)).json(); },
+  async results(videoId) { return (await fetch(`/api/results/${videoId}`)).json(); },
   async vehicles(videoId) { return (await fetch(`/api/vehicles/${videoId}`)).json(); },
-  async videos()          { return (await fetch('/api/videos')).json(); },
-  async startCamera(source = '0') { 
+  async videos() { return (await fetch('/api/videos')).json(); },
+  async startCamera(source = '0') {
     const url = `/api/camera/start?camera_source=${encodeURIComponent(source)}`;
-    return (await fetch(url, { method: 'POST' })).json(); 
+    return (await fetch(url, { method: 'POST' })).json();
   },
-  async stopCamera()      { return (await fetch('/api/camera/stop', { method: 'POST' })).json(); },
-  async cameraStats()     { return (await fetch('/api/camera/stats')).json(); },
+  async stopCamera() { return (await fetch('/api/camera/stop', { method: 'POST' })).json(); },
+  async cameraStats() { return (await fetch('/api/camera/stats')).json(); },
 };
 
 // ── Toast Notifications ───────────────────────────────────────
@@ -50,8 +50,8 @@ const NotificationSystem = {
     }, duration);
   },
   success(msg) { this.show(msg, 'success'); },
-  error(msg)   { this.show(msg, 'error'); },
-  info(msg)    { this.show(msg, 'info'); },
+  error(msg) { this.show(msg, 'error'); },
+  info(msg) { this.show(msg, 'info'); },
 };
 
 // ── Stats Animator ────────────────────────────────────────────
@@ -60,7 +60,7 @@ const StatsAnimator = {
     const el = document.getElementById(elId);
     if (!el) return;
     const start = parseInt(el.textContent) || 0;
-    const diff  = target - start;
+    const diff = target - start;
     const steps = 30;
     let step = 0;
     const timer = setInterval(() => {
@@ -91,7 +91,7 @@ const TabManager = {
     buttons.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
 
     const panel = document.getElementById(`panel${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
-    const btn   = document.getElementById(`tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+    const btn = document.getElementById(`tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
     if (panel) panel.classList.add('active');
     if (btn) { btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); }
 
@@ -105,7 +105,7 @@ const FileUploader = {
     e.preventDefault();
     document.getElementById('dropZone').classList.add('dragover');
   },
-  onDragLeave()  { document.getElementById('dropZone').classList.remove('dragover'); },
+  onDragLeave() { document.getElementById('dropZone').classList.remove('dragover'); },
   onDrop(e) {
     e.preventDefault();
     document.getElementById('dropZone').classList.remove('dragover');
@@ -119,9 +119,9 @@ const FileUploader = {
 
   async _upload(file) {
     const uploadBlock = document.getElementById('uploadProgress');
-    const statusText  = document.getElementById('uploadStatusText');
-    const pct         = document.getElementById('uploadPct');
-    const bar         = document.getElementById('uploadBar');
+    const statusText = document.getElementById('uploadStatusText');
+    const pct = document.getElementById('uploadPct');
+    const bar = document.getElementById('uploadBar');
 
     uploadBlock.classList.remove('hidden');
     statusText.textContent = `Uploading ${file.name}…`;
@@ -130,8 +130,8 @@ const FileUploader = {
     let fakeProgress = 0;
     const fakeTimer = setInterval(() => {
       fakeProgress = Math.min(fakeProgress + 8, 90);
-      bar.style.width  = fakeProgress + '%';
-      pct.textContent  = fakeProgress + '%';
+      bar.style.width = fakeProgress + '%';
+      pct.textContent = fakeProgress + '%';
     }, 100);
 
     try {
@@ -139,7 +139,7 @@ const FileUploader = {
       clearInterval(fakeTimer);
       bar.style.width = '100%';
       pct.textContent = '100%';
-      statusText.textContent = '✓ Uploaded — processing started';
+      statusText.textContent = 'Uploaded — processing started';
 
       NotificationSystem.success(`"${file.name}" uploaded. Processing started (ID: ${result.video_id})`);
       AppState.currentVideoId = result.video_id;
@@ -154,7 +154,7 @@ const FileUploader = {
       clearInterval(fakeTimer);
       bar.style.width = '100%';
       bar.style.background = 'var(--accent-red)';
-      statusText.textContent = '✗ Upload failed';
+      statusText.textContent = 'Upload failed';
       NotificationSystem.error(`Upload failed: ${err.message}`);
     }
   },
@@ -164,10 +164,10 @@ const FileUploader = {
 const StatusPoller = {
   start(videoId) {
     if (AppState.pollerTimer) clearInterval(AppState.pollerTimer);
-    const procBlock   = document.getElementById('procProgress');
-    const procStatus  = document.getElementById('procStatusText');
-    const procPct     = document.getElementById('procPct');
-    const procBar     = document.getElementById('procBar');
+    const procBlock = document.getElementById('procProgress');
+    const procStatus = document.getElementById('procStatusText');
+    const procPct = document.getElementById('procPct');
+    const procBar = document.getElementById('procBar');
 
     procBlock.classList.remove('hidden');
     procStatus.textContent = 'Processing…';
@@ -182,13 +182,13 @@ const StatusPoller = {
 
         if (data.status === 'completed') {
           clearInterval(AppState.pollerTimer);
-          procStatus.textContent = '✓ Completed!';
+          procStatus.textContent = 'Completed';
           NotificationSystem.success(`Video #${videoId} processing complete!`);
           await ResultsRenderer.load(videoId);
           document.getElementById('downloadRow').style.display = 'flex';
         } else if (data.status === 'failed') {
           clearInterval(AppState.pollerTimer);
-          procStatus.textContent = '✗ Processing failed';
+          procStatus.textContent = 'Processing failed';
           NotificationSystem.error(`Video #${videoId} processing failed.`);
         }
       } catch { /* silently retry */ }
@@ -215,11 +215,11 @@ const ResultsRenderer = {
 
   _fillAnalytics(a) {
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    set('anaCars',     a.cars || 0);
-    set('anaTrucks',   a.trucks || 0);
-    set('anaBuses',    a.buses || 0);
-    set('anaBikes',    a.bikes || 0);
-    set('anaOverPct',  (a.overspeed_percentage || 0).toFixed(1) + '%');
+    set('anaCars', a.cars || 0);
+    set('anaTrucks', a.trucks || 0);
+    set('anaBuses', a.buses || 0);
+    set('anaBikes', a.bikes || 0);
+    set('anaOverPct', (a.overspeed_percentage || 0).toFixed(1) + '%');
     set('anaMaxSpeed', (a.max_speed || 0).toFixed(1) + ' km/h');
   },
 
@@ -233,8 +233,8 @@ const ResultsRenderer = {
     tbody.innerHTML = vehicles.map(v => {
       const isOver = v.status === 'overspeed';
       const statusBadge = isOver
-        ? '<span class="status-badge status-overspeed">⚠ Overspeed</span>'
-        : '<span class="status-badge status-normal">✓ Normal</span>';
+        ? '<span class="status-badge status-overspeed">Overspeed</span>'
+        : '<span class="status-badge status-normal">Normal</span>';
       return `
         <tr class="${isOver ? 'row-overspeed' : ''}">
           <td>${v.vehicle_unique_id}</td>
@@ -296,8 +296,8 @@ const CameraManager = {
       img.classList.remove('hidden');
       document.getElementById('cameraPlaceholder').classList.add('hidden');
       document.getElementById('btnStartCam').disabled = true;
-      document.getElementById('btnStopCam').disabled  = false;
-      
+      document.getElementById('btnStopCam').disabled = false;
+
       this.isStreaming = true;
       this.startPolling();
       this.startStatsPolling();
@@ -335,18 +335,18 @@ const CameraManager = {
           const s = response.data;
           // Update top stat cards
           StatsAnimator.update({
-            total_vehicles:    s.total_vehicles    || 0,
-            avg_speed:         s.avg_speed         || 0,
-            overspeed_count:   s.overspeed_count   || 0,
-            plates_detected:   s.plates_detected   || 0,
+            total_vehicles: s.total_vehicles || 0,
+            avg_speed: s.avg_speed || 0,
+            overspeed_count: s.overspeed_count || 0,
+            plates_detected: s.plates_detected || 0,
           });
           // Update analysis result cards
           const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-          set('anaCars',     s.cars    || 0);
-          set('anaTrucks',   s.trucks  || 0);
-          set('anaBuses',    s.buses   || 0);
-          set('anaBikes',    s.bikes   || 0);
-          set('anaOverPct',  s.total_vehicles > 0
+          set('anaCars', s.cars || 0);
+          set('anaTrucks', s.trucks || 0);
+          set('anaBuses', s.buses || 0);
+          set('anaBikes', s.bikes || 0);
+          set('anaOverPct', s.total_vehicles > 0
             ? ((s.overspeed_count / s.total_vehicles) * 100).toFixed(1) + '%'
             : '0.0%');
           // Max speed: track it ourselves since API gives avg
@@ -379,7 +379,7 @@ const CameraManager = {
       img.classList.add('hidden');
       document.getElementById('cameraPlaceholder').classList.remove('hidden');
       document.getElementById('btnStartCam').disabled = false;
-      document.getElementById('btnStopCam').disabled  = true;
+      document.getElementById('btnStopCam').disabled = true;
       NotificationSystem.info('Camera stream stopped.');
     } catch (err) {
       NotificationSystem.error('Failed to stop camera: ' + err.message);
@@ -401,15 +401,29 @@ const Downloader = {
   },
 };
 
+// ── Theme Manager ─────────────────────────────────────────────
+const ThemeManager = {
+  toggle() {
+    const isLight = document.documentElement.classList.toggle('light');
+    localStorage.setItem('tsa-theme', isLight ? 'light' : 'dark');
+  },
+  init() {
+    if (localStorage.getItem('tsa-theme') === 'light') {
+      document.documentElement.classList.add('light');
+    }
+  },
+};
+
 // ── Init ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  ThemeManager.init();
   // Verify API is live
   fetch('/api/health').then(r => r.json()).then(d => {
     if (d.status === 'ok') {
-      document.getElementById('systemStatus').textContent = '● ONLINE';
+      document.getElementById('systemStatus').textContent = 'ONLINE';
     }
   }).catch(() => {
-    document.getElementById('systemStatus').textContent = '● OFFLINE';
+    document.getElementById('systemStatus').textContent = 'OFFLINE';
     document.getElementById('systemStatus').style.color = 'var(--accent-red)';
   });
 });

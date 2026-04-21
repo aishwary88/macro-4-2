@@ -13,7 +13,7 @@ logger = get_logger("run")
 
 def main():
     logger.info("=" * 60)
-    logger.info("SentrySpeed Traffic Analyzer v2.0")
+    logger.info("Traffic Analyzer v2.0")
     logger.info("=" * 60)
 
     # Initialize database

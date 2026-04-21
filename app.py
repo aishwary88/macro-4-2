@@ -64,8 +64,14 @@ templates = Jinja2Templates(directory=_templates_dir)
 # ------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse, tags=["Frontend"])
+async def landing(request: Request):
+    """Serve the landing page."""
+    return templates.TemplateResponse(request=request, name="landing.html")
+
+
+@app.get("/dashboard", response_class=HTMLResponse, tags=["Frontend"])
 async def dashboard(request: Request):
-    """Serve the premium dashboard."""
+    """Serve the main dashboard."""
     return templates.TemplateResponse(request=request, name="index.html")
 
 

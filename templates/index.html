@@ -1,93 +1,154 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SentrySpeed — Traffic Analyzer</title>
-  <meta name="description" content="AI-powered traffic analysis: vehicle detection, speed estimation, and license plate recognition with real-time insights." />
+  <title>Traffic Speed Analyzer — Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="shortcut icon" href="/static/favicon.svg" />
+  <meta name="description"
+    content="AI-powered traffic speed analysis: vehicle detection, speed estimation, and license plate recognition." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
+  <script>if (localStorage.getItem('tsa-theme') === 'light') document.documentElement.classList.add('light');</script>
 </head>
+
 <body>
-  <!-- ─── PARTICLES ─────────────────────────────────────────── -->
   <div id="particles" aria-hidden="true"></div>
 
-  <!-- ─── HEADER ───────────────────────────────────────────── -->
+  <!-- Header -->
   <header class="header">
     <div class="header-inner">
       <div class="brand">
-        <span class="brand-icon">🚦</span>
-        <span class="brand-name">SentrySpeed</span>
+        <a href="/" class="brand-back" title="Back to Home">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M19 12H5M12 5l-7 7 7 7" />
+          </svg>
+        </a>
+        <div class="brand-mark">TSA</div>
+        <div class="brand-text">
+          <span class="brand-name">Traffic Speed Analyzer</span>
+          <span class="brand-sub">AI-Powered Vehicle Intelligence</span>
+        </div>
         <span class="brand-tag">v2.0</span>
       </div>
-      <div class="header-badges">
-        <span class="badge badge-live" id="systemStatus">● ONLINE</span>
-        <span class="badge badge-info" id="dbBadge">DB Ready</span>
+      <div class="header-right">
+        <div class="header-badges">
+          <span class="badge badge-live" id="systemStatus">ONLINE</span>
+          <span class="badge badge-info" id="dbBadge">DB Ready</span>
+        </div>
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme" onclick="ThemeManager.toggle()">
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- ─── STATS ROW ─────────────────────────────────────────── -->
+  <!-- Stats Row -->
   <section class="stats-row" aria-label="Summary statistics">
-    <div class="stat-card" id="statTotalVehicles">
-      <div class="stat-icon">🚗</div>
+    <div class="stat-card">
+      <div class="stat-icon-svg">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      </div>
       <div class="stat-value" id="totalVehiclesVal">0</div>
       <div class="stat-label">Total Vehicles</div>
     </div>
-    <div class="stat-card" id="statAvgSpeed">
-      <div class="stat-icon">⚡</div>
+    <div class="stat-card">
+      <div class="stat-icon-svg">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      </div>
       <div class="stat-value" id="avgSpeedVal">0</div>
       <div class="stat-label">Avg Speed (km/h)</div>
     </div>
-    <div class="stat-card" id="statPlates">
-      <div class="stat-icon">🔢</div>
+    <div class="stat-card">
+      <div class="stat-icon-svg">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+      </div>
       <div class="stat-value" id="platesVal">0</div>
       <div class="stat-label">Plates Detected</div>
     </div>
-    <div class="stat-card stat-danger" id="statOverspeed">
-      <div class="stat-icon">⚠️</div>
+    <div class="stat-card stat-danger">
+      <div class="stat-icon-svg">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      </div>
       <div class="stat-value" id="overspeedVal">0</div>
       <div class="stat-label">Overspeed Events</div>
     </div>
   </section>
 
-  <!-- ─── MAIN CONTENT ──────────────────────────────────────── -->
+  <!-- Main Content -->
   <main class="main-content">
 
-    <!-- Left Panel: Tabs -->
+    <!-- Left Panel -->
     <div class="panel panel-left">
-
-      <!-- Tab Nav -->
       <nav class="tab-nav" role="tablist">
-        <button class="tab-btn active" id="tabUpload" role="tab" aria-selected="true" aria-controls="panelUpload" onclick="TabManager.show('upload')">
-          📤 Upload Video
+        <button class="tab-btn active" id="tabUpload" role="tab" aria-selected="true" aria-controls="panelUpload"
+          onclick="TabManager.show('upload')">
+          Upload Video
         </button>
-        <button class="tab-btn" id="tabCamera" role="tab" aria-selected="false" aria-controls="panelCamera" onclick="TabManager.show('camera')">
-          📷 Live Camera
+        <button class="tab-btn" id="tabCamera" role="tab" aria-selected="false" aria-controls="panelCamera"
+          onclick="TabManager.show('camera')">
+          Live Camera
         </button>
-        <button class="tab-btn" id="tabHistory" role="tab" aria-selected="false" aria-controls="panelHistory" onclick="TabManager.show('history')">
-          📋 History
+        <button class="tab-btn" id="tabHistory" role="tab" aria-selected="false" aria-controls="panelHistory"
+          onclick="TabManager.show('history')">
+          History
         </button>
       </nav>
 
       <!-- Upload Panel -->
       <div class="tab-panel active" id="panelUpload" role="tabpanel">
-        <div class="drop-zone" id="dropZone"
-             ondragover="FileUploader.onDragOver(event)"
-             ondragleave="FileUploader.onDragLeave(event)"
-             ondrop="FileUploader.onDrop(event)"
-             onclick="document.getElementById('fileInput').click()">
-          <div class="drop-icon">📁</div>
+        <div class="drop-zone" id="dropZone" ondragover="FileUploader.onDragOver(event)"
+          ondragleave="FileUploader.onDragLeave(event)" ondrop="FileUploader.onDrop(event)"
+          onclick="document.getElementById('fileInput').click()">
+          <div class="drop-icon-svg">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
           <p class="drop-title">Drop video here or click to browse</p>
           <p class="drop-hint">Supported: MP4, AVI, MOV, MKV — max 2GB</p>
-          <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none" onchange="FileUploader.onFileSelect(event)" />
+          <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none"
+            onchange="FileUploader.onFileSelect(event)" />
         </div>
 
-        <!-- Upload Progress -->
         <div class="progress-block hidden" id="uploadProgress">
           <div class="progress-label">
-            <span id="uploadStatusText">Uploading…</span>
+            <span id="uploadStatusText">Uploading...</span>
             <span id="uploadPct">0%</span>
           </div>
           <div class="progress-bar-track">
@@ -95,10 +156,9 @@
           </div>
         </div>
 
-        <!-- Processing Progress -->
         <div class="progress-block hidden" id="procProgress">
           <div class="progress-label">
-            <span id="procStatusText">Processing…</span>
+            <span id="procStatusText">Processing...</span>
             <span id="procPct">0%</span>
           </div>
           <div class="progress-bar-track">
@@ -111,16 +171,21 @@
       <div class="tab-panel" id="panelCamera" role="tabpanel">
         <div class="camera-controls">
           <div class="control-group">
-            <label for="cameraSource">Camera Source:</label>
-            <input type="text" id="cameraSource" placeholder="0 (or http://192.168.1.x:8080/video)" value="0" />
-            <small>Use 0 for laptop camera, or paste your phone camera URL</small>
+            <label for="cameraSource">Camera Source</label>
+            <input type="text" id="cameraSource" placeholder="0 or http://192.168.1.x:8080/video" value="0" />
+            <small>Use 0 for local webcam, or enter your IP camera URL</small>
           </div>
-          <button class="btn btn-primary" id="btnStartCam" onclick="CameraManager.start()">▶ Start Camera</button>
-          <button class="btn btn-danger" id="btnStopCam" onclick="CameraManager.stop()" disabled>■ Stop</button>
+          <button class="btn btn-primary" id="btnStartCam" onclick="CameraManager.start()">Start Camera</button>
+          <button class="btn btn-danger" id="btnStopCam" onclick="CameraManager.stop()" disabled>Stop</button>
         </div>
         <div class="camera-frame" id="cameraFrame">
           <img id="cameraStream" src="" alt="Live camera feed" class="hidden" />
           <div class="camera-placeholder" id="cameraPlaceholder">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+              style="margin-bottom:0.5rem;opacity:0.4">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
             <span>Camera inactive</span>
           </div>
         </div>
@@ -128,21 +193,20 @@
 
       <!-- History Panel -->
       <div class="tab-panel" id="panelHistory" role="tabpanel">
-        <button class="btn btn-secondary btn-sm" onclick="HistoryManager.refresh()">↻ Refresh</button>
+        <button class="btn btn-secondary btn-sm" onclick="HistoryManager.refresh()">Refresh</button>
         <div id="historyList" class="history-list">
           <p class="muted">No videos processed yet.</p>
         </div>
       </div>
     </div>
 
-    <!-- Right Panel: Results -->
+    <!-- Right Panel -->
     <div class="panel panel-right" id="resultsPanel">
       <h2 class="panel-title">
         Analysis Results
         <span class="panel-title-badge" id="resultVideoId"></span>
       </h2>
 
-      <!-- Analytics cards -->
       <div class="analytics-grid" id="analyticsGrid">
         <div class="ana-card">
           <span class="ana-label">Cars</span>
@@ -170,17 +234,25 @@
         </div>
       </div>
 
-      <!-- Download buttons -->
       <div class="download-row" id="downloadRow" style="display:none">
         <button class="btn btn-primary" id="btnDownloadExcel" onclick="Downloader.excel()">
-          📊 Download Excel
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Download Excel
         </button>
         <button class="btn btn-secondary" id="btnDownloadVideo" onclick="Downloader.video()">
-          🎬 Download Video
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Download Video
         </button>
       </div>
 
-      <!-- Vehicle table -->
       <div class="table-wrapper" id="tableWrapper">
         <table class="vehicle-table" id="vehicleTable">
           <thead>
@@ -194,7 +266,9 @@
             </tr>
           </thead>
           <tbody id="vehicleTableBody">
-            <tr><td colspan="6" class="empty-row">No results yet. Upload a video to begin.</td></tr>
+            <tr>
+              <td colspan="6" class="empty-row">No results yet. Upload a video to begin.</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -202,9 +276,8 @@
 
   </main>
 
-  <!-- ─── NOTIFICATION TOAST ────────────────────────────────── -->
   <div id="toastContainer" aria-live="polite"></div>
-
   <script src="/static/js/app.js"></script>
 </body>
+
 </html>

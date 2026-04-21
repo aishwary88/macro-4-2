@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Traffic Speed Analyzer — AI Traffic Analysis Platform</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+    <link rel="shortcut icon" href="/static/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="/static/css/landing.css" />
+    <script>if (localStorage.getItem('tsa-theme') === 'light') document.documentElement.classList.add('light');</script>
+</head>
+
+<body>
+
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="bg-glow bg-glow-1" aria-hidden="true"></div>
+    <div class="bg-glow bg-glow-2" aria-hidden="true"></div>
+
+    <!-- Nav -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <div class="brand">
+                <div class="brand-mark">TSA</div>
+                <div>
+                    <div class="brand-name">Traffic Speed Analyzer</div>
+                    <div class="brand-sub">AI-Powered Vehicle Intelligence</div>
+                </div>
+            </div>
+            <div class="nav-right">
+                <span class="version-tag">v2.0</span>
+                <button class="theme-toggle-btn" id="themeToggle" onclick="ThemeManager.toggle()" title="Toggle theme">
+                    <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                    <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <circle cx="12" cy="12" r="5" />
+                        <line x1="12" y1="1" x2="12" y2="3" />
+                        <line x1="12" y1="21" x2="12" y2="23" />
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                        <line x1="1" y1="12" x2="3" y2="12" />
+                        <line x1="21" y1="12" x2="23" y2="12" />
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                    </svg>
+                </button>
+                <a href="/dashboard" class="btn-nav">Open Dashboard</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-inner">
+            <div class="hero-badge">AI-Powered · Real-Time · Accurate</div>
+            <h1 class="hero-title">
+                Intelligent Traffic<br />
+                <span class="gradient-text">Speed Analysis</span>
+            </h1>
+            <p class="hero-desc">
+                Traffic Speed Analyzer combines computer vision, deep learning, and license plate recognition
+                to deliver precise vehicle detection, speed estimation, and traffic analytics
+                from any video source or live camera feed.
+            </p>
+            <div class="hero-actions">
+                <a href="/dashboard" class="btn-primary">
+                    Launch Dashboard
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                </a>
+                <a href="#features" class="btn-ghost">View Features</a>
+            </div>
+            <div class="hero-stats">
+                <div class="h-stat">
+                    <div class="h-stat-value">99.2%</div>
+                    <div class="h-stat-label">Detection Accuracy</div>
+                </div>
+                <div class="h-stat-divider"></div>
+                <div class="h-stat">
+                    <div class="h-stat-value">30 FPS</div>
+                    <div class="h-stat-label">Real-Time Processing</div>
+                </div>
+                <div class="h-stat-divider"></div>
+                <div class="h-stat">
+                    <div class="h-stat-value">4+</div>
+                    <div class="h-stat-label">Vehicle Classes</div>
+                </div>
+                <div class="h-stat-divider"></div>
+                <div class="h-stat">
+                    <div class="h-stat-value">ANPR</div>
+                    <div class="h-stat-label">Plate Recognition</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features" id="features">
+        <div class="section-inner">
+            <div class="section-header">
+                <div class="section-tag">Core Capabilities</div>
+                <h2 class="section-title">Everything you need for traffic intelligence</h2>
+                <p class="section-desc">A complete pipeline from raw video to actionable insights, powered by YOLOv8 and
+                    advanced tracking algorithms.</p>
+            </div>
+
+            <div class="features-grid">
+
+                <div class="feature-card feature-card-wide">
+                    <div class="feature-icon-wrap">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8">
+                            <rect x="2" y="3" width="20" height="14" rx="2" />
+                            <path d="M8 21h8M12 17v4" />
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Video & Live Camera Analysis</h3>
+                    <p class="feature-desc">Upload pre-recorded footage or connect a live camera stream. Supports MP4,
+                        AVI, MOV, MKV formats up to 2GB, plus IP camera URLs and local webcams.</p>
+                    <div class="feature-tags">
+                        <span>MP4 / AVI / MOV</span>
+                        <span>IP Camera</span>
+                        <span>Webcam</span>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon-wrap">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8">
+                            <circle cx="12" cy="12" r="3" />
+                            <path
+                                d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Speed Estimation</h3>
+                    <p class="feature-desc">Calibrated speed measurement using perspective transformation and frame-rate
+                        analysis. Configurable speed thresholds for overspeed detection.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon-wrap">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8">
+                            <path
+                                d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" />
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">License Plate Recognition</h3>
+                    <p class="feature-desc">Automatic Number Plate Recognition (ANPR) extracts and logs plate numbers
+                        for every tracked vehicle using OCR and image enhancement.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon-wrap">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Vehicle Classification</h3>
+                    <p class="feature-desc">Classifies detected objects into Cars, Trucks, Buses, and Bikes using YOLOv8
+                        with per-class counts and statistics in the results panel.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon-wrap">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Real-Time Analytics</h3>
+                    <p class="feature-desc">Live dashboard updates with total vehicle count, average speed, overspeed
+                        events, and per-class breakdowns. All data persisted to SQLite.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon-wrap">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Excel Report Export</h3>
+                    <p class="feature-desc">Download a structured Excel report with per-vehicle data including ID, type,
+                        plate number, average speed, max speed, and overspeed status.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="pipeline">
+        <div class="section-inner">
+            <div class="section-header">
+                <div class="section-tag">Pipeline</div>
+                <h2 class="section-title">How it works</h2>
+            </div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">01</div>
+                    <h4 class="step-title">Ingest</h4>
+                    <p class="step-desc">Upload a video file or connect a live camera source via URL or device index.
+                    </p>
+                </div>
+                <div class="step-arrow">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                </div>
+                <div class="step">
+                    <div class="step-num">02</div>
+                    <h4 class="step-title">Detect</h4>
+                    <p class="step-desc">YOLOv8 detects and classifies vehicles frame-by-frame with high precision.</p>
+                </div>
+                <div class="step-arrow">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                </div>
+                <div class="step">
+                    <div class="step-num">03</div>
+                    <h4 class="step-title">Track & Measure</h4>
+                    <p class="step-desc">Multi-object tracking assigns unique IDs and computes speed using calibrated
+                        ROI zones.</p>
+                </div>
+                <div class="step-arrow">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                </div>
+                <div class="step">
+                    <div class="step-num">04</div>
+                    <h4 class="step-title">Report</h4>
+                    <p class="step-desc">Results are stored, visualized on the dashboard, and available as Excel
+                        exports.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta">
+        <div class="cta-inner">
+            <h2 class="cta-title">Ready to analyze traffic?</h2>
+            <p class="cta-desc">Open the dashboard and upload your first video or connect a live camera to get started.
+            </p>
+            <a href="/dashboard" class="btn-primary btn-lg">
+                Launch Dashboard
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <span class="brand-name" style="font-size:0.95rem">Traffic Speed Analyzer</span>
+            <span class="footer-sep">·</span>
+            <span style="color:var(--text-muted);font-size:0.82rem">AI Traffic Analysis Platform v2.0</span>
+        </div>
+    </footer>
+
+    <script>
+        const ThemeManager = {
+            toggle() {
+                const isLight = document.documentElement.classList.toggle('light');
+                localStorage.setItem('tsa-theme', isLight ? 'light' : 'dark');
+            },
+            init() {
+                if (localStorage.getItem('tsa-theme') === 'light') {
+                    document.documentElement.classList.add('light');
+                }
+            }
+        };
+        ThemeManager.init();
+    </script>
+</body>
+
+</html>
