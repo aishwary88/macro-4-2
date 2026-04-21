@@ -242,13 +242,6 @@ def _run_camera_loop(camera_source) -> None:
 
         renderer = FrameRenderer(debug=settings.DEBUG)
 
-        logger.info(
-            f"Camera loop started: source={camera_source}, "
-            f"size={frame_w}x{frame_h}, fps={real_fps:.1f}, "
-            f"ROI lines: A={line_a_y}px B={line_b_y}px, "
-            f"distance={settings.ROI_DISTANCE_METERS}m"
-        )
-
         frame_num = 0
         frame_interval = 1.0 / real_fps
         detect_every   = max(1, settings.DETECT_EVERY_N_FRAMES)
@@ -273,6 +266,10 @@ def _run_camera_loop(camera_source) -> None:
         roi_mgr.frame_width = proc_w
         calibrator.compute_pixels_per_meter(line_a_y, line_b_y, settings.ROI_DISTANCE_METERS)
 
+        # ── Pixel-displacement speed estimator (primary for camera) ──
+        from modules.speed.pixel_speed_estimator import PixelSpeedEstimator
+        pixel_speed = PixelSpeedEstimator(fps=real_fps)
+
         # ANPR components for camera
         from modules.anpr.plate_detector import PlateDetector as _PD
         from modules.anpr.plate_reader import PlateReader as _PR
@@ -283,7 +280,8 @@ def _run_camera_loop(camera_source) -> None:
             f"Camera loop started: source={camera_source}, "
             f"input={frame_w}x{frame_h}, proc={proc_w}x{proc_h}, "
             f"fps={real_fps:.1f}, detect_every={detect_every}, "
-            f"ROI A={line_a_y}px B={line_b_y}px, dist={settings.ROI_DISTANCE_METERS}m"
+            f"pixel_scale={settings.PIXEL_SCALE} m/px, "
+            f"ROI A={line_a_y}px B={line_b_y}px"
         )
 
         # Wait for first frame
@@ -338,12 +336,21 @@ def _run_camera_loop(camera_source) -> None:
                 state_mgr.update_position(vid, center, timestamp, v.bbox, v.confidence)
                 state_mgr.set_vehicle_type(vid, classifier.classify(v.class_name))
 
-                # Speed via ROI line crossing
+                # ── Speed: pixel-displacement (primary, always runs) ──
+                px_speed = pixel_speed.update(vid, center, frame_num)
+                if px_speed is not None:
+                    state_mgr.set_speed(vid, px_speed)
+
+                # ── Speed: ROI line-crossing (secondary, more accurate
+                #    when vehicle crosses both lines) ──────────────────
                 prev_pos = state_mgr.get_previous_position(vid)
                 if prev_pos is not None:
                     speed_data = speed_estimator.update(vid, prev_pos, center, timestamp)
                     if speed_data and speed_data.speed_kmh is not None:
+                        # ROI result overrides pixel speed (more accurate)
                         state_mgr.set_speed(vid, speed_data.speed_kmh)
+                        # Reset pixel smoother so it doesn't drag down the ROI value
+                        pixel_speed._state.pop(vid, None)
 
                 # ANPR — throttled per vehicle
                 vstate = state_mgr.get_vehicle(vid)
@@ -374,6 +381,11 @@ def _run_camera_loop(camera_source) -> None:
                     max_age_frames=settings.MAX_TRACK_AGE,
                     current_vehicle_ids=current_ids,
                 )
+                # Also clean pixel speed state for removed vehicles
+                active_ids = set(state_mgr.vehicles.keys())
+                for vid in list(pixel_speed._state.keys()):
+                    if vid not in active_ids:
+                        pixel_speed.remove(vid)
                 last_cleanup_time = now
 
             # ── Render on original frame ──────────────────────────────

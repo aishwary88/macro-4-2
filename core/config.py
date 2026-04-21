@@ -34,6 +34,21 @@ class Settings:
     ROI_LINE_A_Y: int = int(os.getenv("ROI_LINE_A_Y", "300"))
     ROI_LINE_B_Y: int = int(os.getenv("ROI_LINE_B_Y", "500"))
 
+    # ── Pixel-displacement speed (camera mode) ────────────────────────
+    # scale = real_world_meters / pixels for a known reference distance
+    # Example: a car lane is ~3.5m wide. If it spans ~200px → scale = 3.5/200 = 0.0175
+    # Default 0.05 works for typical road camera at ~5-10m distance
+    PIXEL_SCALE: float = float(os.getenv("PIXEL_SCALE", "0.05"))
+
+    # Minimum pixel movement per frame to count as real motion (noise filter)
+    SPEED_MIN_PIXEL_MOVE: float = float(os.getenv("SPEED_MIN_PIXEL_MOVE", "3.0"))
+
+    # Number of recent speed samples to average (smoothing window)
+    SPEED_SMOOTH_WINDOW: int = int(os.getenv("SPEED_SMOOTH_WINDOW", "7"))
+
+    # Update speed every N processed frames (stability)
+    SPEED_UPDATE_INTERVAL: int = int(os.getenv("SPEED_UPDATE_INTERVAL", "3"))
+
     # Detection
     DETECTION_CONFIDENCE: float = float(os.getenv("DETECTION_CONFIDENCE", "0.5"))
     OCR_CONFIDENCE: float = float(os.getenv("OCR_CONFIDENCE", "0.4"))
