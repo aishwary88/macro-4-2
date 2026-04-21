@@ -306,6 +306,13 @@ async def camera_stats():
     )
 
 
+@app.get("/api/camera/vehicles", tags=["Camera"])
+async def camera_vehicles():
+    """Get live per-vehicle data from the active camera stream."""
+    vehicles = ProcessingService.get_camera_vehicles()
+    return {"vehicles": vehicles}
+
+
 # ------------------------------------------------------------------
 # Model Metrics Endpoint
 # ------------------------------------------------------------------

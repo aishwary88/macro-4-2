@@ -66,7 +66,7 @@ EXCEL_HEADER_FG = "FFFFFF"
 # ========================================
 # Detection Defaults
 # ========================================
-MIN_DETECTION_AREA = 500        # Minimum bbox area in pixels
+MIN_DETECTION_AREA = 300        # Minimum bbox area in pixels (lowered for distant vehicles)
 MAX_TRACKING_DISTANCE = 150     # Max pixel distance for tracking match
 TRACK_HISTORY_LENGTH = 30       # Number of past positions to store
 

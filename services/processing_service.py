@@ -19,6 +19,7 @@ _camera_active = False
 _camera_lock = threading.Lock()
 _camera_thread: Optional[threading.Thread] = None
 _current_frame = None
+_camera_state_mgr = None   # live reference to state manager for vehicle table
 _camera_stats = {
     "total_vehicles": 0,
     "avg_speed": 0.0,
@@ -91,6 +92,33 @@ class ProcessingService:
             return _camera_stats.copy()
 
     @staticmethod
+    def get_camera_vehicles() -> list:
+        """Return live per-vehicle data from the active camera stream."""
+        global _camera_state_mgr
+        if _camera_state_mgr is None:
+            return []
+        try:
+            vehicles = []
+            for vid, v in _camera_state_mgr.vehicles.items():
+                avg_spd = round(
+                    sum(v.speed_history) / len(v.speed_history), 1
+                ) if v.speed_history else (v.speed or 0.0)
+                vehicles.append({
+                    "vehicle_unique_id": vid,
+                    "vehicle_type":      v.vehicle_type or "Unknown",
+                    "plate_number":      v.plate or "N/A",
+                    "avg_speed":         avg_spd,
+                    "max_speed":         round(v.max_speed, 1),
+                    "status":            "overspeed" if v.overspeed else "normal",
+                })
+            # Sort by vehicle ID
+            vehicles.sort(key=lambda x: x["vehicle_unique_id"])
+            return vehicles
+        except Exception as e:
+            logger.error(f"Error getting camera vehicles: {e}")
+            return []
+
+    @staticmethod
     def _update_camera_stats(state_mgr) -> None:
         """Calculate and update camera stats from vehicle state manager.
         
@@ -147,12 +175,8 @@ class ProcessingService:
 
 
 def _run_camera_loop(camera_source) -> None:
-    """Background thread: captures frames, runs full detection+tracking+speed pipeline.
-
-    Args:
-        camera_source: Either int (camera index) or str (camera URL)
-    """
-    global _camera_active, _current_frame
+    """Background thread: captures frames, runs full detection+tracking+speed pipeline."""
+    global _camera_active, _current_frame, _camera_state_mgr
     import cv2
     import threading as _threading
     from modules.detection.detector import VehicleDetector
@@ -231,6 +255,10 @@ def _run_camera_loop(camera_source) -> None:
         tracker   = VehicleTracker(frame_rate=int(real_fps))
         state_mgr = VehicleStateManager()
         classifier = VehicleClassifier()
+
+        # Expose state manager globally for /api/camera/vehicles
+        global _camera_state_mgr
+        _camera_state_mgr = state_mgr
 
         # ROI lines at 35% and 65% of frame height (same as video pipeline)
         line_a_y = int(frame_h * 0.35)
@@ -448,6 +476,7 @@ def _run_camera_loop(camera_source) -> None:
         _reader_active[0] = False
         reader.join(timeout=2.0)
         cap.release()
+        _camera_state_mgr = None
         logger.info("Camera stream stopped.")
 
     except Exception as e:

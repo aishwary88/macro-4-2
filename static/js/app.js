@@ -469,45 +469,78 @@ const CameraManager = {
     this.statsInterval = setInterval(async () => {
       if (!this.isStreaming) return;
       try {
-        const response = await API.cameraStats();
-        if (response.data) {
-          const s = response.data;
+        // Fetch stats + vehicles in parallel
+        const [statsResp, vehResp] = await Promise.all([
+          API.cameraStats(),
+          fetch('/api/camera/vehicles').then(r => r.json()).catch(() => ({ vehicles: [] })),
+        ]);
+
+        if (statsResp.data) {
+          const s = statsResp.data;
+
           // Update top stat cards
           StatsAnimator.update({
-            total_vehicles: s.total_vehicles || 0,
-            avg_speed: s.avg_speed || 0,
-            overspeed_count: s.overspeed_count || 0,
-            plates_detected: s.plates_detected || 0,
+            total_vehicles:  s.total_vehicles  || 0,
+            avg_speed:       s.avg_speed        || 0,
+            overspeed_count: s.overspeed_count  || 0,
+            plates_detected: s.plates_detected  || 0,
           });
-          // Update analysis result cards
+
+          // Update analysis cards
           const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-          set('anaCars', s.cars || 0);
-          set('anaTrucks', s.trucks || 0);
-          set('anaBuses', s.buses || 0);
-          set('anaBikes', s.bikes || 0);
+          set('anaCars',    s.cars    || 0);
+          set('anaTrucks',  s.trucks  || 0);
+          set('anaBuses',   s.buses   || 0);
+          set('anaBikes',   s.bikes   || 0);
           set('anaOverPct', s.total_vehicles > 0
             ? ((s.overspeed_count / s.total_vehicles) * 100).toFixed(1) + '%'
             : '0.0%');
-          // Max speed: track it ourselves since API gives avg
-          if (s.avg_speed > (CameraManager._maxSpeed || 0)) {
+
+          // Track max speed
+          if ((s.avg_speed || 0) > (CameraManager._maxSpeed || 0)) {
             CameraManager._maxSpeed = s.avg_speed;
           }
           set('anaMaxSpeed', (CameraManager._maxSpeed || 0).toFixed(1) + ' km/h');
+          const ms = document.getElementById('maxSpeedVal');
+          if (ms) ms.textContent = Math.round(CameraManager._maxSpeed || 0);
         }
+
+        // Fill vehicle table with live camera data
+        const vehicles = vehResp.vehicles || [];
+        if (vehicles.length > 0) {
+          AppState.allVehicles = vehicles;
+          // Show download row only for video mode — hide for camera
+          const dr = document.getElementById('downloadRow');
+          if (dr) dr.style.display = 'none';
+          TableFilter.apply();
+        }
+
       } catch (err) {
         console.error('Stats polling error:', err);
       }
-    }, 500);
+    }, 1000);  // poll every 1s for live feel
   },
 
   async stop() {
     try {
       this.isStreaming = false;
       this._maxSpeed = 0;
-      if (this.streamInterval) {
-        clearInterval(this.streamInterval);
-        this.streamInterval = null;
-      }
+      [this.streamInterval, this.statsInterval].forEach(t => { if (t) clearInterval(t); });
+      this.streamInterval = this.statsInterval = null;
+      await API.stopCamera();
+      const img = document.getElementById('cameraStream');
+      if (img) { img.src = ''; img.classList.add('hidden'); }
+      document.getElementById('cameraPlaceholder')?.classList.remove('hidden');
+      document.getElementById('btnStartCam').disabled = false;
+      document.getElementById('btnStopCam').disabled  = true;
+      // Clear live table
+      AppState.allVehicles = [];
+      TableFilter.apply();
+      NotificationSystem.success('Camera stopped.');
+    } catch (err) {
+      NotificationSystem.error('Stop failed: ' + err.message);
+    }
+  },
       if (this.statsInterval) {
         clearInterval(this.statsInterval);
         this.statsInterval = null;
