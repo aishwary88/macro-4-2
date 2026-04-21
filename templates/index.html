@@ -14,7 +14,7 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
     rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
-  <script>if (localStorage.getItem('tsa-theme') === 'light') document.documentElement.classList.add('light');</script>
+  <script>if (localStorage.getItem('traffic-analyzer-theme') === 'light') document.documentElement.classList.add('light');</script>
 </head>
 
 <body>
@@ -29,7 +29,7 @@
             <path d="M19 12H5M12 5l-7 7 7 7" />
           </svg>
         </a>
-        <div class="brand-mark">TSA</div>
+        <img src="/static/image.png" alt="Traffic Speed Analyzer" class="brand-logo" />
         <div class="brand-text">
           <span class="brand-name">Traffic Speed Analyzer</span>
           <span class="brand-sub">AI-Powered Vehicle Intelligence</span>
@@ -126,6 +126,10 @@
           onclick="TabManager.show('history')">
           History
         </button>
+        <button class="tab-btn" id="tabMetrics" role="tab" aria-selected="false" aria-controls="panelMetrics"
+          onclick="TabManager.show('metrics')">
+          Model Metrics
+        </button>
       </nav>
 
       <!-- Upload Panel -->
@@ -175,8 +179,11 @@
             <input type="text" id="cameraSource" placeholder="0 or http://192.168.1.x:8080/video" value="0" />
             <small>Use 0 for local webcam, or enter your IP camera URL</small>
           </div>
-          <button class="btn btn-primary" id="btnStartCam" onclick="CameraManager.start()">Start Camera</button>
-          <button class="btn btn-danger" id="btnStopCam" onclick="CameraManager.stop()" disabled>Stop</button>
+          <div class="camera-actions">
+            <button class="btn btn-primary" id="btnStartCam" onclick="CameraManager.start()">Start Camera</button>
+            <button class="btn btn-danger" id="btnStopCam" onclick="CameraManager.stop()" disabled>Stop</button>
+            <button class="btn btn-secondary btn-sm" onclick="CameraManager.showPhoneGuide()">Phone Setup</button>
+          </div>
         </div>
         <div class="camera-frame" id="cameraFrame">
           <img id="cameraStream" src="" alt="Live camera feed" class="hidden" />
@@ -189,6 +196,58 @@
             <span>Camera inactive</span>
           </div>
         </div>
+
+        <!-- Phone Setup Guide (Hidden by default) -->
+        <div class="phone-guide hidden" id="phoneGuide">
+          <div class="guide-header">
+            <h3>Phone Camera Setup Guide</h3>
+            <button class="btn-close" onclick="CameraManager.hidePhoneGuide()">×</button>
+          </div>
+          <div class="guide-content">
+            <div class="guide-step">
+              <div class="step-number">1</div>
+              <div class="step-content">
+                <h4>Install IP Camera App</h4>
+                <p><strong>Android:</strong> IP Webcam Pro, DailyRoads Voyager</p>
+                <p><strong>iPhone:</strong> Iriun WebCam, Reincubate Codeshot</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="step-number">2</div>
+              <div class="step-content">
+                <h4>Start Camera Server</h4>
+                <p>Open app → Grant permissions → Tap "Start Server"</p>
+                <p>Note the IP address shown (e.g., 192.168.1.100:8080)</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="step-number">3</div>
+              <div class="step-content">
+                <h4>Find Stream URL</h4>
+                <p><strong>IP Webcam Pro:</strong> http://192.168.x.x:8080/video</p>
+                <p><strong>DailyRoads:</strong> http://192.168.x.x:8080/mjpegfeed</p>
+                <p>Test URL in browser first!</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="step-number">4</div>
+              <div class="step-content">
+                <h4>Connect to Dashboard</h4>
+                <p>Paste URL in "Camera Source" field above</p>
+                <p>Click "Start Camera" → Live video appears!</p>
+              </div>
+            </div>
+            <div class="guide-troubleshoot">
+              <h4>Troubleshooting</h4>
+              <ul>
+                <li>Ensure phone and laptop on same WiFi</li>
+                <li>Check app is actually running on phone</li>
+                <li>Try different endpoint paths (/video, /mjpegfeed)</li>
+                <li>Disable phone firewall temporarily</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- History Panel -->
@@ -196,6 +255,17 @@
         <button class="btn btn-secondary btn-sm" onclick="HistoryManager.refresh()">Refresh</button>
         <div id="historyList" class="history-list">
           <p class="muted">No videos processed yet.</p>
+        </div>
+      </div>
+
+      <!-- Model Metrics Panel -->
+      <div class="tab-panel" id="panelMetrics" role="tabpanel">
+        <div class="metrics-header">
+          <h3>ANPR Model Training Metrics</h3>
+          <button class="btn btn-secondary btn-sm" onclick="MetricsManager.refresh()">Refresh</button>
+        </div>
+        <div id="metricsContent" class="metrics-content">
+          <p class="muted">Loading training metrics...</p>
         </div>
       </div>
     </div>
@@ -277,6 +347,20 @@
   </main>
 
   <div id="toastContainer" aria-live="polite"></div>
+
+  <!-- Vehicle Detail Modal -->
+  <div class="modal-overlay hidden" id="vehicleModal" onclick="VehicleDetailModal.close()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Vehicle Details</h3>
+        <button class="btn-close" onclick="VehicleDetailModal.close()">×</button>
+      </div>
+      <div class="modal-body" id="vehicleDetailContent">
+        <p class="muted">Loading vehicle details...</p>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/js/app.js"></script>
 </body>
 

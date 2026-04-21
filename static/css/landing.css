@@ -91,6 +91,14 @@ html.light .bg-glow { opacity: 0.15; }
   font-weight: 800; font-size: 0.72rem; color: #fff; letter-spacing: 0.3px;
 }
 
+.brand-logo-landing {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
 .brand-name {
   font-size: 1.1rem; font-weight: 700;
   background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));

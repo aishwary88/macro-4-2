@@ -25,6 +25,7 @@ const API = {
   async status(videoId) { return (await fetch(`/api/status/${videoId}`)).json(); },
   async results(videoId) { return (await fetch(`/api/results/${videoId}`)).json(); },
   async vehicles(videoId) { return (await fetch(`/api/vehicles/${videoId}`)).json(); },
+  async vehicleDetail(vehicleId) { return (await fetch(`/api/vehicle/${vehicleId}`)).json(); },
   async videos() { return (await fetch('/api/videos')).json(); },
   async startCamera(source = '0') {
     const url = `/api/camera/start?camera_source=${encodeURIComponent(source)}`;
@@ -96,6 +97,7 @@ const TabManager = {
     if (btn) { btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); }
 
     if (tabName === 'history') HistoryManager.refresh();
+    if (tabName === 'metrics') MetricsManager.refresh();
   },
 };
 
@@ -236,7 +238,7 @@ const ResultsRenderer = {
         ? '<span class="status-badge status-overspeed">Overspeed</span>'
         : '<span class="status-badge status-normal">Normal</span>';
       return `
-        <tr class="${isOver ? 'row-overspeed' : ''}">
+        <tr class="${isOver ? 'row-overspeed' : ''}" onclick="VehicleDetailModal.show(${v.vehicle_unique_id})">
           <td>${v.vehicle_unique_id}</td>
           <td>${v.vehicle_type}</td>
           <td>${v.plate_number || '—'}</td>
@@ -245,6 +247,83 @@ const ResultsRenderer = {
           <td>${statusBadge}</td>
         </tr>`;
     }).join('');
+  },
+};
+
+// ── Metrics Manager ───────────────────────────────────────────
+const MetricsManager = {
+  async refresh() {
+    const content = document.getElementById('metricsContent');
+    content.innerHTML = '<p class="muted">Loading training metrics...</p>';
+
+    try {
+      const response = await fetch('/api/model-metrics');
+      const data = await response.json();
+
+      if (!data.available) {
+        content.innerHTML = '<p class="muted">No training metrics available. Train the model first.</p>';
+        return;
+      }
+
+      this.render(data);
+    } catch (err) {
+      content.innerHTML = '<p class="muted">Failed to load metrics: ' + err.message + '</p>';
+    }
+  },
+
+  render(data) {
+    const content = document.getElementById('metricsContent');
+
+    const html = `
+      <div class="metrics-summary">
+        <div class="metric-card">
+          <h4>Best Epoch</h4>
+          <div class="metric-value">${data.best_epoch}</div>
+          <div class="metric-label">out of ${data.total_epochs}</div>
+        </div>
+        <div class="metric-card">
+          <h4>Precision</h4>
+          <div class="metric-value">${(data.best.precision * 100).toFixed(1)}%</div>
+          <div class="metric-label">Best: ${(data.best.precision * 100).toFixed(2)}%</div>
+        </div>
+        <div class="metric-card">
+          <h4>Recall</h4>
+          <div class="metric-value">${(data.best.recall * 100).toFixed(1)}%</div>
+          <div class="metric-label">Best: ${(data.best.recall * 100).toFixed(2)}%</div>
+        </div>
+        <div class="metric-card">
+          <h4>mAP@50</h4>
+          <div class="metric-value">${(data.best.mAP50 * 100).toFixed(1)}%</div>
+          <div class="metric-label">Best: ${(data.best.mAP50 * 100).toFixed(2)}%</div>
+        </div>
+        <div class="metric-card">
+          <h4>mAP@50-95</h4>
+          <div class="metric-value">${(data.best.mAP50_95 * 100).toFixed(1)}%</div>
+          <div class="metric-label">Best: ${(data.best.mAP50_95 * 100).toFixed(2)}%</div>
+        </div>
+      </div>
+      
+      <div class="metrics-images">
+        <div class="metric-image">
+          <h4>Training Results</h4>
+          <img src="/static/metrics/results.png" alt="Training Results" />
+        </div>
+        <div class="metric-image">
+          <h4>Loss Curves</h4>
+          <img src="/static/metrics/loss_curve.png" alt="Loss Curves" />
+        </div>
+        <div class="metric-image">
+          <h4>mAP Curves</h4>
+          <img src="/static/metrics/map_curve.png" alt="mAP Curves" />
+        </div>
+        <div class="metric-image">
+          <h4>Precision-Recall</h4>
+          <img src="/static/metrics/precision_recall.png" alt="Precision-Recall Curve" />
+        </div>
+      </div>
+    `;
+
+    content.innerHTML = html;
   },
 };
 
@@ -287,6 +366,14 @@ const CameraManager = {
   streamInterval: null,
   statsInterval: null,
   isStreaming: false,
+
+  showPhoneGuide() {
+    document.getElementById('phoneGuide').classList.remove('hidden');
+  },
+
+  hidePhoneGuide() {
+    document.getElementById('phoneGuide').classList.add('hidden');
+  },
 
   async start() {
     try {
@@ -387,6 +474,87 @@ const CameraManager = {
   },
 };
 
+// ── Vehicle Detail Modal ──────────────────────────────────────
+const VehicleDetailModal = {
+  async show(vehicleId) {
+    const modal = document.getElementById('vehicleModal');
+    const content = document.getElementById('vehicleDetailContent');
+
+    modal.classList.remove('hidden');
+    content.innerHTML = '<p class="muted">Loading vehicle details...</p>';
+
+    try {
+      const detail = await API.vehicleDetail(vehicleId);
+      this.render(detail);
+    } catch (err) {
+      content.innerHTML = `<p class="muted">Failed to load vehicle details: ${err.message}</p>`;
+    }
+  },
+
+  close() {
+    document.getElementById('vehicleModal').classList.add('hidden');
+  },
+
+  render(detail) {
+    const content = document.getElementById('vehicleDetailContent');
+    const isOverspeed = detail.status === 'overspeed';
+
+    const html = `
+      <div class="vehicle-detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Vehicle ID</div>
+          <div class="detail-value">${detail.vehicle_unique_id}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Vehicle Type</div>
+          <div class="detail-value">${detail.vehicle_type}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">License Plate</div>
+          <div class="detail-value">${detail.plate_number || 'Not detected'}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Status</div>
+          <div class="detail-value ${isOverspeed ? 'overspeed' : 'normal'}">
+            ${isOverspeed ? 'OVERSPEED' : 'NORMAL'}
+          </div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Average Speed</div>
+          <div class="detail-value">${(detail.avg_speed || 0).toFixed(1)} km/h</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Max Speed</div>
+          <div class="detail-value ${detail.max_speed > 60 ? 'overspeed' : ''}">${(detail.max_speed || 0).toFixed(1)} km/h</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">First Seen</div>
+          <div class="detail-value">${detail.first_seen ? new Date(detail.first_seen).toLocaleString() : 'N/A'}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Last Seen</div>
+          <div class="detail-value">${detail.last_seen ? new Date(detail.last_seen).toLocaleString() : 'N/A'}</div>
+        </div>
+      </div>
+      
+      ${detail.speed_logs && detail.speed_logs.length > 0 ? `
+        <div class="speed-logs">
+          <h4>Speed History</h4>
+          ${detail.speed_logs.slice(0, 10).map(log => `
+            <div class="speed-log-item">
+              <span class="log-time">${new Date(log.timestamp).toLocaleTimeString()}</span>
+              <span class="log-speed ${log.speed > 60 ? 'overspeed' : ''}">${log.speed.toFixed(1)} km/h</span>
+            </div>
+          `).join('')}
+          ${detail.speed_logs.length > 10 ? `<p class="muted">... and ${detail.speed_logs.length - 10} more entries</p>` : ''}
+        </div>
+      ` : ''}
+    `;
+
+    content.innerHTML = html;
+  },
+};
+
 // ── Downloader ────────────────────────────────────────────────
 const Downloader = {
   excel() {
@@ -405,10 +573,10 @@ const Downloader = {
 const ThemeManager = {
   toggle() {
     const isLight = document.documentElement.classList.toggle('light');
-    localStorage.setItem('tsa-theme', isLight ? 'light' : 'dark');
+    localStorage.setItem('traffic-analyzer-theme', isLight ? 'light' : 'dark');
   },
   init() {
-    if (localStorage.getItem('tsa-theme') === 'light') {
+    if (localStorage.getItem('traffic-analyzer-theme') === 'light') {
       document.documentElement.classList.add('light');
     }
   },

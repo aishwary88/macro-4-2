@@ -12,7 +12,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="/static/css/landing.css" />
-    <script>if (localStorage.getItem('tsa-theme') === 'light') document.documentElement.classList.add('light');</script>
+    <script>if (localStorage.getItem('traffic-analyzer-theme') === 'light') document.documentElement.classList.add('light');</script>
 </head>
 
 <body>
@@ -25,7 +25,7 @@
     <nav class="nav">
         <div class="nav-inner">
             <div class="brand">
-                <div class="brand-mark">TSA</div>
+                <img src="/static/image.png" alt="Traffic Speed Analyzer" class="brand-logo-landing" />
                 <div>
                     <div class="brand-name">Traffic Speed Analyzer</div>
                     <div class="brand-sub">AI-Powered Vehicle Intelligence</div>
@@ -284,10 +284,10 @@
         const ThemeManager = {
             toggle() {
                 const isLight = document.documentElement.classList.toggle('light');
-                localStorage.setItem('tsa-theme', isLight ? 'light' : 'dark');
+                localStorage.setItem('traffic-analyzer-theme', isLight ? 'light' : 'dark');
             },
             init() {
-                if (localStorage.getItem('tsa-theme') === 'light') {
+                if (localStorage.getItem('traffic-analyzer-theme') === 'light') {
                     document.documentElement.classList.add('light');
                 }
             }
