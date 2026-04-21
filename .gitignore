@@ -66,10 +66,15 @@ video_images/
 # ── State-wise OLX data ────────────────────────────────────────
 State-wise_OLX/
 
-# ── Test videos in root (duplicates of input/) ────────────────
-test_video.mp4
-test_video_3.mp4
-test_video_4.mp4
+# ── Auto-generated redesign docs ──────────────────────────────
+PREMIUM_REDESIGN_COMPLETE.md
+REDESIGN_COMPLETE_SUMMARY.md
+
+# ── Draft/temp CSS files ───────────────────────────────────────
+static/css/style_new.css
+
+# ── Phone camera test script output ───────────────────────────
+phone_test_frame.jpg
 
 # ── IDE / OS ──────────────────────────────────────────────────
 .vscode/settings.json
