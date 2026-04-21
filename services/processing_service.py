@@ -176,14 +176,25 @@ def _run_camera_loop(camera_source) -> None:
             camera_index.startswith("http") or camera_index.startswith("rtsp")
         )
 
-        cap = cv2.VideoCapture(camera_index)
+        # Phone/IP cameras: try FFMPEG backend first (better MJPEG support)
         if is_url:
+            logger.info(f"Connecting to IP/phone camera: {camera_index}")
+            cap = cv2.VideoCapture(camera_index, cv2.CAP_FFMPEG)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            time.sleep(0.8)  # give FFMPEG time to connect
+            if not cap.isOpened():
+                cap.release()
+                cap = cv2.VideoCapture(camera_index)  # fallback to default
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                time.sleep(0.5)
+        else:
+            cap = cv2.VideoCapture(camera_index)
 
         if not cap.isOpened():
             logger.error(
-                f"Cannot open camera source: '{camera_source}'. "
-                f"Check that the camera is connected / URL is reachable."
+                f"Cannot open camera: '{camera_source}'. "
+                f"Phone camera: ensure IP Webcam app is running, "
+                f"same WiFi, correct URL (e.g. http://192.168.x.x:8080/video)"
             )
             _camera_active = False
             return
@@ -248,6 +259,7 @@ def _run_camera_loop(camera_source) -> None:
         last_process_time = time.time()
         last_stats_update = time.time()
         last_cleanup_time = time.time()
+        last_annotated    = [None]   # keep last annotated frame for skipped frames
 
         # Compute processing resolution
         proc_w = settings.PROCESS_WIDTH
@@ -309,10 +321,14 @@ def _run_camera_loop(camera_source) -> None:
             # ── Frame skip ────────────────────────────────────────────
             frame_num += 1
             if frame_num % detect_every != 0:
-                # Still encode and serve the raw frame so stream stays smooth
-                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                with _camera_lock:
-                    _current_frame = buf.tobytes()
+                # Serve last annotated frame (with boxes) not raw frame
+                if last_annotated[0] is not None:
+                    with _camera_lock:
+                        _current_frame = last_annotated[0]
+                else:
+                    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                    with _camera_lock:
+                        _current_frame = buf.tobytes()
                 continue
 
             timestamp = frame_num / real_fps
@@ -388,18 +404,40 @@ def _run_camera_loop(camera_source) -> None:
                         pixel_speed.remove(vid)
                 last_cleanup_time = now
 
+            # ── Clear stale bboxes for vehicles not in current frame ──
+            # This prevents boxes "sticking" on vehicles that left the frame
+            for vid, vstate in state_mgr.vehicles.items():
+                if vid not in current_ids:
+                    vstate.current_bbox = None
+
             # ── Render on original frame ──────────────────────────────
+            # ROI lines are in proc-space — scale them to original frame size
+            # bbox_scale converts proc-space coords → original frame coords
+            render_scale = 1.0 / cam_scale if cam_scale < 1.0 else 1.0
+
+            # Temporarily scale ROI line positions for rendering
+            orig_line_a = roi_mgr.line_a_y
+            orig_line_b = roi_mgr.line_b_y
+            roi_mgr.line_a_y = int(orig_line_a * render_scale)
+            roi_mgr.line_b_y = int(orig_line_b * render_scale)
+
             annotated = renderer.draw(
                 frame, state_mgr,
                 roi_manager=roi_mgr,
                 frame_number=frame_num,
                 video_fps=real_fps,
-                bbox_scale=1.0 / cam_scale if cam_scale < 1.0 else 1.0,
+                bbox_scale=render_scale,
             )
 
-            _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            # Restore ROI line positions
+            roi_mgr.line_a_y = orig_line_a
+            roi_mgr.line_b_y = orig_line_b
+
+            _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            buf_bytes = buf.tobytes()
+            last_annotated[0] = buf_bytes   # save for skipped frames
             with _camera_lock:
-                _current_frame = buf.tobytes()
+                _current_frame = buf_bytes
 
             # ── Update stats every 0.5 s ──────────────────────────────
             if now - last_stats_update >= 0.5:

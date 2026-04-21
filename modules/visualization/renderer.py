@@ -75,24 +75,37 @@ class FrameRenderer:
     def _draw_vehicle(self, frame: np.ndarray, vehicle_id: int, vs, scale: float = 1.0) -> None:
         """Draw bounding box, ID label, speed, and plate for one vehicle."""
         x1, y1, x2, y2 = [int(c * scale) for c in vs.current_bbox]
+
+        # Clamp to frame bounds
+        fh, fw = frame.shape[:2]
+        x1 = max(0, min(x1, fw - 1))
+        y1 = max(0, min(y1, fh - 1))
+        x2 = max(0, min(x2, fw - 1))
+        y2 = max(0, min(y2, fh - 1))
+
+        if x2 <= x1 or y2 <= y1:
+            return
+
         is_over = vs.overspeed
-
         color = COLOR_OVERSPEED if is_over else COLOR_NORMAL
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, self.thickness)
 
-        # -- ID + type label
-        label = f"ID:{vehicle_id}  {vs.vehicle_type or 'Vehicle'}"
-        self._put_label(frame, label, (x1, y1 - 8), color, self.font_medium)
+        # Thick box — 2px border + 1px inner highlight for visibility
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), self.thickness + 2)  # black outline
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, self.thickness)           # colored box
 
-        # -- Speed label
-        if vs.speed is not None:
-            speed_txt = f"{vs.speed:.1f} km/h"
-            suffix = " OVER" if is_over else ""
-            self._put_label(frame, speed_txt + suffix, (x1, y1 - 28), color, self.font_medium)
+        # Speed label — always show (even if 0, show "--")
+        speed_txt = f"{vs.speed:.1f} km/h" if vs.speed is not None else "-- km/h"
+        if is_over:
+            speed_txt += " OVER"
+        self._put_label(frame, speed_txt, (x1, max(y1 - 6, 20)), color, self.font_medium)
 
-        # -- Plate label
+        # ID + type label below speed
+        label = f"ID:{vehicle_id} {vs.vehicle_type or 'Vehicle'}"
+        self._put_label(frame, label, (x1, max(y1 - 26, 40)), (200, 200, 200), self.font_small)
+
+        # Plate label below box
         if vs.plate and vs.plate_confidence >= 0.4:
-            self._put_label(frame, vs.plate, (x1, y2 + 18), COLOR_PLATE_TEXT, self.font_small)
+            self._put_label(frame, vs.plate, (x1, min(y2 + 16, fh - 4)), COLOR_PLATE_TEXT, self.font_small)
 
     def _draw_track_trail(self, frame: np.ndarray, vs, scale: float = 1.0) -> None:
         """Draw historical centroid path as a faded polyline (debug mode)."""
@@ -159,40 +172,36 @@ class FrameRenderer:
         frame_number: int,
         video_fps: float,
     ) -> None:
-        """Top-left HUD with vehicle count, overspeed count, timestamp."""
-        h, w = frame.shape[:2]
-        vehicles = state_manager.get_all_vehicles()
-        total = len(vehicles)
-        overspeeding = len(state_manager.get_overspeeding())
+        """Top-left HUD with vehicle count, avg speed, overspeed count, timestamp."""
+        vehicles   = state_manager.get_all_vehicles()
+        active     = {vid: v for vid, v in vehicles.items() if v.current_bbox is not None}
+        total      = len(active)
+        overspeeding = sum(1 for v in active.values() if v.overspeed)
+        speeds     = [v.speed for v in active.values() if v.speed is not None and v.speed > 0]
+        avg_spd    = round(sum(speeds) / len(speeds), 1) if speeds else 0.0
 
         now = datetime.now().strftime("%H:%M:%S")
-        elapsed = f"{frame_number / max(video_fps, 1):.1f}s"
 
         lines = [
             f"Vehicles: {total}",
+            f"Avg Speed: {avg_spd} km/h",
             f"Overspeed: {overspeeding}",
-            f"Frame: {frame_number}  ({elapsed})",
             f"Time: {now}",
         ]
 
-        # Semi-transparent background
-        pad = 6
-        box_w = 200
+        pad   = 6
+        box_w = 210
         box_h = len(lines) * 22 + pad * 2
         overlay = frame.copy()
         cv2.rectangle(overlay, (0, 0), (box_w, box_h), COLOR_HUD_BG, -1)
-        cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+        cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
 
         for i, line in enumerate(lines):
             cv2.putText(
-                frame,
-                line,
+                frame, line,
                 (pad, pad + (i + 1) * 20),
-                self.font,
-                self.font_small,
-                (220, 220, 220),
-                1,
-                cv2.LINE_AA,
+                self.font, self.font_small,
+                (220, 220, 220), 1, cv2.LINE_AA,
             )
 
     def _put_label(
