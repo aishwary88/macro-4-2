@@ -214,9 +214,12 @@ class TrafficPipeline:
         fps: float,
         total_frames: int,
     ) -> None:
-        """Persist vehicle data to DB and generate Excel report."""
-        import pandas as pd
-        from modules.data.analytics import compute_analytics_from_state
+        """Persist vehicle data to DB, then generate Excel from that same DB data.
+
+        Single source of truth: state_manager → DB → Excel + API.
+        """
+        from modules.data.analytics import compute_analytics
+        from modules.data.database import delete_vehicles_for_video
 
         # ── Fallback speed for vehicles that never crossed both ROI lines ──
         self._estimate_fallback_speeds(fps)
@@ -224,22 +227,48 @@ class TrafficPipeline:
         df = self.state_manager.export_to_dataframe()
         duration = total_frames / fps if fps > 0 else 0
 
-        # Build vehicle records list — convert datetime fields to strings for Excel
-        if not df.empty:
-            df_excel = df.copy()
-            for col in ("first_seen", "last_seen"):
-                if col in df_excel.columns:
-                    df_excel[col] = df_excel[col].apply(
-                        lambda v: v.strftime("%Y-%m-%d %H:%M:%S") if hasattr(v, "strftime") else (str(v) if v else "")
-                    )
-        else:
-            df_excel = df
-
+        # ── STEP 1: Save to DB (delete first to prevent duplicates on re-run) ──
+        delete_vehicles_for_video(video_id)
         vehicle_records = df.to_dict(orient="records") if not df.empty else []
         save_vehicles(video_id, vehicle_records)
+        logger.info(f"Saved {len(vehicle_records)} vehicles to DB for video {video_id}")
 
-        # Generate Excel
-        analytics = compute_analytics_from_state(self.state_manager)
+        # ── STEP 2: Update video status so DB is complete before Excel ──
+        total = len(vehicle_records)
+        update_video_status(
+            video_id,
+            "completed",
+            progress=100,
+            total_vehicles=total,
+            duration=duration,
+            fps=fps,
+            processed_video_path=output_path,
+        )
+
+        # ── STEP 3: Generate Excel FROM DB (same data the API serves) ──
+        from modules.data.database import get_vehicles_by_video
+        import pandas as pd
+
+        db_vehicles = get_vehicles_by_video(video_id)
+        analytics   = compute_analytics(video_id)   # reads from DB
+
+        # Build DataFrame from DB records (canonical format)
+        df_excel = pd.DataFrame([
+            {
+                "vehicle_id":   v["vehicle_unique_id"],
+                "vehicle_type": v["vehicle_type"],
+                "plate_number": v["plate_number"],
+                "avg_speed":    v["avg_speed"],
+                "max_speed":    v["max_speed"],
+                "overspeed":    v["overspeed_flag"],
+                "overspeed_flag": v["overspeed_flag"],
+                "first_seen":   str(v.get("first_seen_time") or ""),
+                "last_seen":    str(v.get("last_seen_time") or ""),
+                "frame_count":  v.get("frame_count", 0),
+            }
+            for v in db_vehicles
+        ])
+
         excel_path = os.path.join(
             settings.OUTPUT_DIR, f"report_video_{video_id}.xlsx"
         )
@@ -250,20 +279,13 @@ class TrafficPipeline:
             video_filename=os.path.basename(input_path),
         )
 
-        # Final DB status
-        total = len(self.state_manager.vehicles)
-        update_video_status(
-            video_id,
-            "completed",
-            progress=100,
-            total_vehicles=total,
-            duration=duration,
-            fps=fps,
-            processed_video_path=output_path,
-            excel_path=excel_path,
-        )
+        # ── STEP 4: Persist Excel path to DB ──
+        update_video_status(video_id, "completed", excel_path=excel_path)
+
         logger.info(
-            f"Results saved: {total} vehicles, excel={excel_path}"
+            f"Results saved: {total} vehicles | "
+            f"mAP avg_speed={analytics.get('avg_speed',0):.1f} km/h | "
+            f"excel={excel_path}"
         )
 
     def _estimate_fallback_speeds(self, fps: float) -> None:
