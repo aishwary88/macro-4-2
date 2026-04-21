@@ -413,3 +413,58 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('systemStatus').style.color = 'var(--accent-red)';
   });
 });
+
+
+// ── Model Metrics UI ──────────────────────────────────────────
+const MetricsUI = {
+  showChart(name) {
+    // Hide all charts
+    document.querySelectorAll('.chart-img').forEach(img => img.classList.remove('active'));
+    document.querySelectorAll('.chart-tab-btn').forEach(btn => btn.classList.remove('active'));
+
+    const map = { results: 'chartResults', loss: 'chartLoss', map: 'chartMap', pr: 'chartPr' };
+    const tabMap = { results: 'ctabResults', loss: 'ctabLoss', map: 'ctabMap', pr: 'ctabPr' };
+
+    const img = document.getElementById(map[name]);
+    const btn = document.getElementById(tabMap[name]);
+    if (img) img.classList.add('active');
+    if (btn) btn.classList.add('active');
+  },
+
+  async load() {
+    try {
+      const resp = await fetch('/api/model-metrics');
+      const data = await resp.json();
+      if (!data.available) return;
+
+      const best = data.best;
+
+      // Update badge
+      const badge = document.getElementById('metricsBestEpoch');
+      if (badge) badge.textContent = `Best: Epoch ${data.best_epoch} / ${data.total_epochs}`;
+
+      // Animate metric cards
+      const metrics = [
+        { valId: 'mPrecision', barId: 'mPrecisionBar', val: best.precision },
+        { valId: 'mRecall',    barId: 'mRecallBar',    val: best.recall    },
+        { valId: 'mMap50',     barId: 'mMap50Bar',     val: best.mAP50     },
+        { valId: 'mMap5095',   barId: 'mMap5095Bar',   val: best.mAP50_95  },
+      ];
+
+      metrics.forEach(({ valId, barId, val }) => {
+        const el  = document.getElementById(valId);
+        const bar = document.getElementById(barId);
+        if (el)  el.textContent = (val * 100).toFixed(1) + '%';
+        if (bar) setTimeout(() => bar.style.width = (val * 100).toFixed(1) + '%', 200);
+      });
+
+    } catch (err) {
+      console.warn('Could not load model metrics:', err.message);
+    }
+  },
+};
+
+// Load metrics on page ready
+document.addEventListener('DOMContentLoaded', () => {
+  MetricsUI.load();
+});

@@ -295,6 +295,67 @@ async def camera_stats():
 
 
 # ------------------------------------------------------------------
+# Model Metrics Endpoint
+# ------------------------------------------------------------------
+
+@app.get("/api/model-metrics", tags=["System"])
+async def model_metrics():
+    """Return plate detector training metrics from results.csv."""
+    import csv, os
+    csv_path = "runs/detect/models/plate_detector/results.csv"
+    if not os.path.exists(csv_path):
+        return {"available": False}
+
+    rows = []
+    with open(csv_path, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append({k.strip(): v.strip() for k, v in row.items()})
+
+    if not rows:
+        return {"available": False}
+
+    # Best epoch = highest mAP50
+    best = max(rows, key=lambda r: float(r.get("metrics/mAP50(B)", 0)))
+    last = rows[-1]
+
+    def _f(row, key):
+        try: return round(float(row[key]), 4)
+        except: return 0.0
+
+    # Per-epoch data for charts
+    epochs = [int(r["epoch"]) for r in rows]
+
+    return {
+        "available": True,
+        "best_epoch": int(best["epoch"]),
+        "total_epochs": len(rows),
+        "best": {
+            "precision":  _f(best, "metrics/precision(B)"),
+            "recall":     _f(best, "metrics/recall(B)"),
+            "mAP50":      _f(best, "metrics/mAP50(B)"),
+            "mAP50_95":   _f(best, "metrics/mAP50-95(B)"),
+        },
+        "last": {
+            "precision":  _f(last, "metrics/precision(B)"),
+            "recall":     _f(last, "metrics/recall(B)"),
+            "mAP50":      _f(last, "metrics/mAP50(B)"),
+            "mAP50_95":   _f(last, "metrics/mAP50-95(B)"),
+        },
+        "chart_data": {
+            "epochs":     epochs,
+            "box_loss":   [_f(r, "train/box_loss")         for r in rows],
+            "cls_loss":   [_f(r, "train/cls_loss")         for r in rows],
+            "val_loss":   [_f(r, "val/box_loss")           for r in rows],
+            "precision":  [_f(r, "metrics/precision(B)")   for r in rows],
+            "recall":     [_f(r, "metrics/recall(B)")      for r in rows],
+            "mAP50":      [_f(r, "metrics/mAP50(B)")       for r in rows],
+            "mAP50_95":   [_f(r, "metrics/mAP50-95(B)")    for r in rows],
+        },
+    }
+
+
+# ------------------------------------------------------------------
 # Health Check
 # ------------------------------------------------------------------
 

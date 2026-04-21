@@ -202,6 +202,60 @@
 
   </main>
 
+  </main>
+
+  <!-- ─── MODEL PERFORMANCE SECTION ───────────────────────── -->
+  <section class="metrics-section" id="metricsSection" aria-label="Model Performance">
+    <div class="metrics-header">
+      <h2 class="metrics-title">📊 Model Performance <span class="metrics-subtitle">— Plate Detector (YOLOv8n)</span></h2>
+      <span class="metrics-badge" id="metricsBestEpoch"></span>
+    </div>
+
+    <!-- Metric Cards Row -->
+    <div class="metrics-cards" id="metricsCards">
+      <div class="metric-card">
+        <div class="metric-icon">🎯</div>
+        <div class="metric-value" id="mPrecision">—</div>
+        <div class="metric-label">Precision</div>
+        <div class="metric-bar-track"><div class="metric-bar-fill" id="mPrecisionBar" style="width:0%;background:#06b6d4"></div></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon">🔍</div>
+        <div class="metric-value" id="mRecall">—</div>
+        <div class="metric-label">Recall</div>
+        <div class="metric-bar-track"><div class="metric-bar-fill" id="mRecallBar" style="width:0%;background:#22c55e"></div></div>
+      </div>
+      <div class="metric-card metric-highlight">
+        <div class="metric-icon">⭐</div>
+        <div class="metric-value" id="mMap50">—</div>
+        <div class="metric-label">mAP@50</div>
+        <div class="metric-bar-track"><div class="metric-bar-fill" id="mMap50Bar" style="width:0%;background:#a855f7"></div></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon">📐</div>
+        <div class="metric-value" id="mMap5095">—</div>
+        <div class="metric-label">mAP@50-95</div>
+        <div class="metric-bar-track"><div class="metric-bar-fill" id="mMap5095Bar" style="width:0%;background:#f97316"></div></div>
+      </div>
+    </div>
+
+    <!-- Chart Tabs -->
+    <div class="chart-tabs">
+      <button class="chart-tab-btn active" onclick="MetricsUI.showChart('results')"    id="ctabResults">All Metrics</button>
+      <button class="chart-tab-btn"        onclick="MetricsUI.showChart('loss')"       id="ctabLoss">Loss Curve</button>
+      <button class="chart-tab-btn"        onclick="MetricsUI.showChart('map')"        id="ctabMap">mAP Curve</button>
+      <button class="chart-tab-btn"        onclick="MetricsUI.showChart('pr')"         id="ctabPr">Precision / Recall</button>
+    </div>
+
+    <!-- Chart Images -->
+    <div class="chart-container">
+      <img id="chartResults"  src="/static/metrics/results.png"           class="chart-img active" alt="Training results" />
+      <img id="chartLoss"     src="/static/metrics/loss_curve.png"        class="chart-img"        alt="Loss curve" />
+      <img id="chartMap"      src="/static/metrics/map_curve.png"         class="chart-img"        alt="mAP curve" />
+      <img id="chartPr"       src="/static/metrics/precision_recall.png"  class="chart-img"        alt="Precision Recall" />
+    </div>
+  </section>
+
   <!-- ─── NOTIFICATION TOAST ────────────────────────────────── -->
   <div id="toastContainer" aria-live="polite"></div>
 

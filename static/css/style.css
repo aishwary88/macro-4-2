@@ -609,3 +609,161 @@ body {
   .header-inner { padding: 0.7rem 1rem; }
   .main-content { padding: 0 1rem; }
 }
+
+/* ============================================================
+   Model Performance / Metrics Section
+   ============================================================ */
+
+.metrics-section {
+  max-width: 1400px;
+  margin: 2rem auto;
+  padding: 0 1.5rem 2rem;
+}
+
+.metrics-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.metrics-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary, #e2e8f0);
+}
+
+.metrics-subtitle {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--text-muted, #64748b);
+}
+
+.metrics-badge {
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  color: #06b6d4;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* ── Metric Cards ─────────────────────────────────────────── */
+.metrics-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .metrics-cards { grid-template-columns: repeat(2, 1fr); }
+}
+
+.metric-card {
+  background: rgba(13, 23, 50, 0.72);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 1.2rem 1rem 1rem;
+  text-align: center;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.metric-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(6, 182, 212, 0.35);
+}
+
+.metric-card.metric-highlight {
+  border-color: rgba(168, 85, 247, 0.4);
+  background: rgba(168, 85, 247, 0.08);
+}
+
+.metric-icon {
+  font-size: 1.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.1;
+}
+
+.metric-label {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0.3rem 0 0.7rem;
+}
+
+.metric-bar-track {
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.metric-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 1s ease;
+}
+
+/* ── Chart Tabs ───────────────────────────────────────────── */
+.chart-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.chart-tab-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #94a3b8;
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chart-tab-btn:hover {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.4);
+  color: #06b6d4;
+}
+
+.chart-tab-btn.active {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.5);
+  color: #06b6d4;
+  font-weight: 600;
+}
+
+/* ── Chart Images ─────────────────────────────────────────── */
+.chart-container {
+  background: rgba(13, 23, 50, 0.72);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 1rem;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-img {
+  display: none;
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.chart-img.active {
+  display: block;
+}
