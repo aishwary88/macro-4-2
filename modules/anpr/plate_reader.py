@@ -1,13 +1,20 @@
 """
-License plate reader using EasyOCR.
-Extracts text from plate images with post-processing for Indian plate format.
+License plate OCR using EasyOCR.
+
+Pipeline:
+  1. Run OCR on multiple preprocessed image variants
+  2. Clean and normalize each result
+  3. Apply position-aware character corrections
+  4. Validate against Indian plate format regex
+  5. Return best result by confidence
 """
 
 import re
 import numpy as np
+from collections import Counter
 from dataclasses import dataclass
-from typing import Optional
-from modules.utils.image_utils import preprocess_plate
+from typing import Optional, List, Tuple
+from modules.utils.image_utils import preprocess_plate_variants
 from modules.utils.logger import get_logger
 from core.constants import PLATE_REGEX
 
@@ -20,130 +27,121 @@ class PlateData:
     plate_number: str
     confidence: float
     raw_text: str
+    is_valid: bool = False   # True if matches Indian plate format
 
 
 class PlateReader:
-    """EasyOCR-based license plate text reader.
-
-    Features:
-    - Image preprocessing pipeline for better OCR
-    - Post-processing with regex matching for Indian plates
-    - Confidence thresholding
-    """
+    """EasyOCR-based license plate text reader with multi-variant OCR."""
 
     def __init__(self, min_confidence: float = 0.3):
-        """Initialize plate reader.
-
-        Args:
-            min_confidence: Minimum OCR confidence threshold.
-        """
         from core.dependencies import get_ocr_reader
-        self.reader = get_ocr_reader()
+        self.reader         = get_ocr_reader()
         self.min_confidence = min_confidence
         self._plate_pattern = re.compile(PLATE_REGEX)
         logger.info(f"PlateReader initialized (min_confidence={min_confidence})")
 
+    # ------------------------------------------------------------------
     def read_plate(self, plate_image: np.ndarray) -> Optional[PlateData]:
-        """Read text from a plate image.
+        """Read text from a plate image using multi-variant OCR.
 
         Args:
             plate_image: Cropped plate region (BGR).
 
         Returns:
-            PlateData with plate text and confidence, or None.
+            PlateData with best plate text and confidence, or None.
         """
         if plate_image is None or plate_image.size == 0:
             return None
 
         try:
-            # Preprocess for better OCR
-            preprocessed = preprocess_plate(plate_image)
-
-            # Run OCR on both original and preprocessed
-            results = self.reader.readtext(plate_image)
-            results_preprocessed = self.reader.readtext(preprocessed)
-
-            # Combine results
-            all_results = results + results_preprocessed
-
-            if not all_results:
+            variants = preprocess_plate_variants(plate_image)
+            if not variants:
                 return None
 
-            # Find best result
-            best_text = ""
-            best_confidence = 0.0
+            all_candidates: List[Tuple[str, float]] = []
 
-            for result in all_results:
-                if len(result) < 3:
-                    continue
+            for variant in variants:
+                results = self.reader.readtext(variant, detail=1, paragraph=False)
+                for item in results:
+                    if len(item) < 3:
+                        continue
+                    _, text, conf = item
+                    if conf < self.min_confidence:
+                        continue
+                    cleaned = self._clean_plate_text(text)
+                    if len(cleaned) >= 4:
+                        all_candidates.append((cleaned, float(conf)))
 
-                _, text, confidence = result
-
-                if confidence < self.min_confidence:
-                    continue
-
-                # Clean text: remove spaces and special chars
-                cleaned = self._clean_plate_text(text)
-
-                if len(cleaned) < 3:
-                    continue
-
-                if confidence > best_confidence:
-                    best_text = cleaned
-                    best_confidence = confidence
-
-            if not best_text:
+            if not all_candidates:
                 return None
 
-            plate_data = PlateData(
-                plate_number=best_text,
-                confidence=best_confidence,
-                raw_text=best_text,
+            # Prefer valid-format plates; fall back to best confidence
+            valid = [(p, c) for p, c in all_candidates if self._is_valid(p)]
+            pool  = valid if valid else all_candidates
+
+            # Pick highest confidence
+            best_plate, best_conf = max(pool, key=lambda x: x[1])
+
+            return PlateData(
+                plate_number=best_plate,
+                confidence=best_conf,
+                raw_text=best_plate,
+                is_valid=self._is_valid(best_plate),
             )
-
-            logger.debug(f"Plate read: {best_text} (confidence: {best_confidence:.2f})")
-            return plate_data
 
         except Exception as e:
             logger.debug(f"Plate reading error: {e}")
             return None
 
+    # ------------------------------------------------------------------
     def _clean_plate_text(self, text: str) -> str:
-        """Clean and normalize plate text.
+        """Clean OCR output and apply position-aware character corrections.
 
-        Args:
-            text: Raw OCR output.
-
-        Returns:
-            Cleaned plate text.
+        Indian plate format: XX 00 XX 0000
+          pos 0-1  : state code  → letters only
+          pos 2-3  : district    → digits only
+          pos 4-6  : series      → letters only
+          pos 7-10 : number      → digits only
         """
-        # Remove spaces and non-alphanumeric characters
+        # Remove everything except alphanumeric
         cleaned = re.sub(r'[^A-Za-z0-9]', '', text.upper().strip())
 
-        # Common OCR corrections
-        corrections = {
-            'O': '0',  # O to 0 (in number positions)
-            'I': '1',  # I to 1
-            'S': '5',  # S to 5
-            'B': '8',  # B to 8
-        }
+        if len(cleaned) < 4:
+            return cleaned
 
-        # Apply corrections only to likely-numeric positions
-        # Indian format: XX00XX0000 — positions 2-3 and 6-9 are numbers
-        result = list(cleaned)
-        for i, char in enumerate(result):
-            if i in [2, 3] and char in corrections:
-                result[i] = corrections[char]
+        chars = list(cleaned)
 
-        return ''.join(result)
+        # Letter → digit corrections (for digit positions)
+        L2D = {'O': '0', 'I': '1', 'Z': '2', 'S': '5', 'B': '8', 'G': '6', 'T': '7'}
+        # Digit → letter corrections (for letter positions)
+        D2L = {'0': 'O', '1': 'I', '5': 'S', '8': 'B', '6': 'G'}
 
+        # Apply corrections based on expected position in Indian plate
+        for i, ch in enumerate(chars):
+            if i < 2:
+                # State code: must be letters
+                if ch.isdigit():
+                    chars[i] = D2L.get(ch, ch)
+            elif i < 4:
+                # District number: must be digits
+                if ch.isalpha():
+                    chars[i] = L2D.get(ch, ch)
+            elif i < 7:
+                # Series: must be letters
+                if ch.isdigit():
+                    chars[i] = D2L.get(ch, ch)
+            else:
+                # Registration number: must be digits
+                if ch.isalpha():
+                    chars[i] = L2D.get(ch, ch)
+
+        return ''.join(chars)
+
+    # ------------------------------------------------------------------
+    def _is_valid(self, plate: str) -> bool:
+        """Check if plate matches Indian registration format."""
+        return bool(self._plate_pattern.match(plate))
+
+    # ------------------------------------------------------------------
     def validate_plate(self, plate_text: str) -> bool:
-        """Validate if plate text matches Indian plate format.
-
-        Args:
-            plate_text: Plate text to validate.
-
-        Returns:
-            True if valid format.
-        """
-        return bool(self._plate_pattern.match(plate_text))
+        return self._is_valid(plate_text)

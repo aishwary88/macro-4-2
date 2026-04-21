@@ -34,6 +34,8 @@ class VehicleState:
     # License plate
     plate: Optional[str] = None
     plate_confidence: float = 0.0
+    plate_readings: List[Tuple[str, float]] = field(default_factory=list)
+    # Each entry: (plate_text, confidence) — used for multi-frame voting
 
     # ROI crossings
     line_a_time: Optional[float] = None
@@ -132,20 +134,55 @@ class VehicleStateManager:
             logger.warning(f"🚨 Vehicle {vehicle_id} OVERSPEEDING: {speed:.1f} km/h")
 
     def set_plate(self, vehicle_id: int, plate: str, confidence: float):
-        """Set license plate if confidence is higher than existing.
+        """Add a plate reading and update the confirmed plate via majority vote.
+
+        Collects readings across frames and picks the most frequent
+        high-confidence result. Never changes a confirmed plate (conf > 0.85).
 
         Args:
             vehicle_id: Vehicle tracking ID.
-            plate: Plate text.
-            confidence: OCR confidence.
+            plate: Plate text from OCR.
+            confidence: OCR confidence (0-1).
         """
         state = self.get_or_create(vehicle_id)
 
-        # Only update if better confidence
-        if confidence > state.plate_confidence:
-            state.plate = plate
-            state.plate_confidence = confidence
-            logger.info(f"Vehicle {vehicle_id} plate: {plate} (conf: {confidence:.2f})")
+        # Already locked in with very high confidence — don't change
+        if state.plate_confidence >= 0.85:
+            return
+
+        # Accumulate reading
+        state.plate_readings.append((plate, confidence))
+
+        # Need at least 2 readings before voting
+        if len(state.plate_readings) < 2:
+            # Accept first reading if confidence is decent
+            if confidence > state.plate_confidence:
+                state.plate = plate
+                state.plate_confidence = confidence
+            return
+
+        # Vote: count occurrences of each plate text (weighted by confidence)
+        vote_scores: dict = {}
+        for p, c in state.plate_readings:
+            if c >= 0.3:  # ignore very low confidence readings
+                vote_scores[p] = vote_scores.get(p, 0.0) + c
+
+        if not vote_scores:
+            return
+
+        # Pick the plate with highest total confidence score
+        best_plate = max(vote_scores, key=lambda p: vote_scores[p])
+        best_score = vote_scores[best_plate]
+        # Normalize to 0-1 range (cap at 1.0)
+        avg_conf = min(best_score / max(len(state.plate_readings), 1), 1.0)
+
+        if avg_conf > state.plate_confidence:
+            state.plate = best_plate
+            state.plate_confidence = avg_conf
+            logger.info(
+                f"Vehicle {vehicle_id} plate confirmed: {best_plate} "
+                f"(votes={len(state.plate_readings)}, score={avg_conf:.2f})"
+            )
 
     def set_line_crossing(self, vehicle_id: int, line: str, timestamp: float):
         """Record line crossing time.
