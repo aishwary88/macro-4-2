@@ -39,24 +39,29 @@ class FrameRenderer:
         roi_manager=None,
         frame_number: int = 0,
         video_fps: float = 25.0,
+        bbox_scale: float = 1.0,
     ) -> np.ndarray:
         """
         Main render call.  Returns a new annotated copy of *frame*.
+
+        Args:
+            bbox_scale: Scale factor to apply to bboxes (use when detection
+                        was done on a resized frame but rendering on original).
         """
         annotated = frame.copy()
 
-        # ROI lines (always visible)
+        # ROI lines (always visible) — scale Y positions if needed
         if roi_manager is not None:
-            self._draw_roi_lines(annotated, roi_manager)
+            self._draw_roi_lines(annotated, roi_manager, bbox_scale)
 
         # Per-vehicle overlays
         vehicles = state_manager.get_all_vehicles()
         for vid, vs in vehicles.items():
             if vs.current_bbox is None:
                 continue
-            self._draw_vehicle(annotated, vid, vs)
+            self._draw_vehicle(annotated, vid, vs, bbox_scale)
             if self.debug:
-                self._draw_track_trail(annotated, vs)
+                self._draw_track_trail(annotated, vs, bbox_scale)
 
         # HUD overlay (top-right)
         self._draw_hud(annotated, state_manager, frame_number, video_fps)
@@ -67,61 +72,44 @@ class FrameRenderer:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _draw_vehicle(self, frame: np.ndarray, vehicle_id: int, vs) -> None:
+    def _draw_vehicle(self, frame: np.ndarray, vehicle_id: int, vs, scale: float = 1.0) -> None:
         """Draw bounding box, ID label, speed, and plate for one vehicle."""
-        x1, y1, x2, y2 = [int(c) for c in vs.current_bbox]
+        x1, y1, x2, y2 = [int(c * scale) for c in vs.current_bbox]
         is_over = vs.overspeed
 
         color = COLOR_OVERSPEED if is_over else COLOR_NORMAL
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, self.thickness)
 
         # -- ID + type label
-        label_parts = [f"ID:{vehicle_id}", vs.vehicle_type or "Vehicle"]
-        label = "  ".join(label_parts)
+        label = f"ID:{vehicle_id}  {vs.vehicle_type or 'Vehicle'}"
         self._put_label(frame, label, (x1, y1 - 8), color, self.font_medium)
 
         # -- Speed label
         if vs.speed is not None:
             speed_txt = f"{vs.speed:.1f} km/h"
-            suffix = " ⚠ OVER" if is_over else ""
-            self._put_label(
-                frame,
-                speed_txt + suffix,
-                (x1, y1 - 28),
-                color,
-                self.font_medium,
-            )
+            suffix = " OVER" if is_over else ""
+            self._put_label(frame, speed_txt + suffix, (x1, y1 - 28), color, self.font_medium)
 
         # -- Plate label
         if vs.plate and vs.plate_confidence >= 0.4:
-            self._put_label(
-                frame,
-                f"🔲 {vs.plate}",
-                (x1, y2 + 18),
-                COLOR_PLATE_TEXT,
-                self.font_small,
-            )
+            self._put_label(frame, vs.plate, (x1, y2 + 18), COLOR_PLATE_TEXT, self.font_small)
 
-    def _draw_track_trail(self, frame: np.ndarray, vs) -> None:
+    def _draw_track_trail(self, frame: np.ndarray, vs, scale: float = 1.0) -> None:
         """Draw historical centroid path as a faded polyline (debug mode)."""
-        positions = vs.positions  # list of (x, y, ts)
-        pts = [(int(p[0]), int(p[1])) for p in positions[-30:]]
+        positions = vs.positions
+        pts = [(int(p[0] * scale), int(p[1] * scale)) for p in positions[-30:]]
         if len(pts) < 2:
             return
         for i in range(1, len(pts)):
             alpha = i / len(pts)
-            c = (
-                int(COLOR_TRACK[0] * alpha),
-                int(COLOR_TRACK[1] * alpha),
-                int(COLOR_TRACK[2] * alpha),
-            )
-            cv2.line(frame, pts[i - 1], pts[i], c, 1)
+            c = (int(COLOR_TRACK[0]*alpha), int(COLOR_TRACK[1]*alpha), int(COLOR_TRACK[2]*alpha))
+            cv2.line(frame, pts[i-1], pts[i], c, 1)
 
-    def _draw_roi_lines(self, frame: np.ndarray, roi_manager) -> None:
+    def _draw_roi_lines(self, frame: np.ndarray, roi_manager, scale: float = 1.0) -> None:
         """Draw Line A / Line B as dashed horizontal lines."""
         h, w = frame.shape[:2]
-        line_a_y = roi_manager.line_a_y
-        line_b_y = roi_manager.line_b_y
+        line_a_y = int(roi_manager.line_a_y * scale)
+        line_b_y = int(roi_manager.line_b_y * scale)
 
         if line_a_y is not None:
             self._draw_dashed_line(frame, (0, line_a_y), (w, line_a_y), COLOR_ROI_LINE, label="Line A")

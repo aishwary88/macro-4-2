@@ -100,12 +100,29 @@ class TrafficPipeline:
         height = info.height
         total_frames = info.total_frames
 
-        # Update ROI line positions based on real frame height
-        self.roi_manager.set_lines(
-            line_a_y=int(height * 0.35),
-            line_b_y=int(height * 0.65),
+        # ── Compute processing resolution ─────────────────────────────
+        proc_w = settings.PROCESS_WIDTH
+        if proc_w > 0 and width > proc_w:
+            scale    = proc_w / width
+            proc_h   = int(height * scale)
+        else:
+            scale    = 1.0
+            proc_w   = width
+            proc_h   = height
+
+        detect_every = max(1, settings.DETECT_EVERY_N_FRAMES)
+        logger.info(
+            f"Pipeline config: detect_every={detect_every} frames, "
+            f"proc_size={proc_w}x{proc_h} (scale={scale:.2f}), "
+            f"ocr_interval={settings.OCR_EVERY_N_FRAMES}"
         )
-        self.roi_manager.frame_width = width
+
+        # Update ROI line positions based on PROCESSING height (not original)
+        self.roi_manager.set_lines(
+            line_a_y=int(proc_h * 0.35),
+            line_b_y=int(proc_h * 0.65),
+        )
+        self.roi_manager.frame_width = proc_w
 
         # Setup output video
         os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
@@ -120,22 +137,36 @@ class TrafficPipeline:
         try:
             for frame_obj in extract_frames(video_path):
                 frame_num = frame_obj.frame_id
-                frame = frame_obj.image
                 timestamp = frame_obj.timestamp
-                
-                # ── Detection ──
-                detections = self.detector.detect(frame)
 
-                # ── Tracking ──
+                # ── Frame skip: only process every N frames ───────────
+                # Still write every frame to output video for smooth playback
+                if frame_num % detect_every != 0:
+                    # Write original frame (no annotation) to keep video smooth
+                    writer.write(frame_obj.image)
+                    continue
+
+                frame = frame_obj.image
+
+                # ── Resize for faster processing ──────────────────────
+                if scale < 1.0:
+                    small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_LINEAR)
+                else:
+                    small = frame
+
+                # ── Detection ──────────────────────────────────────────
+                detections = self.detector.detect(small)
+
+                # ── Tracking ───────────────────────────────────────────
                 tracked_vehicles = self.tracker.update(detections)
                 current_ids = {v.vehicle_id for v in tracked_vehicles}
 
-                # ── Per-vehicle processing ──
+                # ── Per-vehicle processing ─────────────────────────────
                 for vehicle in tracked_vehicles:
-                    vid = vehicle.vehicle_id
+                    vid    = vehicle.vehicle_id
                     center = bbox_center(vehicle.bbox)
 
-                    # Update state
+                    # Update state (positions in proc-space coords)
                     self.state_manager.update_position(
                         vid, center, timestamp, vehicle.bbox, vehicle.confidence
                     )
@@ -153,33 +184,62 @@ class TrafficPipeline:
                         if speed_data and speed_data.speed_kmh is not None:
                             self.state_manager.set_speed(vid, speed_data.speed_kmh)
 
-                    # ANPR (throttled, only on stable frames)
-                    if self.state_manager.is_good_frame_for_ocr(vid):
-                        # Crop vehicle region
-                        x1, y1, x2, y2 = vehicle.bbox
-                        vehicle_crop = frame[int(y1):int(y2), int(x1):int(x2)]
-                        plate_img = self.plate_detector.detect(vehicle_crop)
-                        if plate_img is not None:
-                            plate_data = self.plate_reader.read_plate(plate_img)
-                            if plate_data:
-                                self.state_manager.set_plate(
-                                    vid, plate_data.plate_number, plate_data.confidence
-                                )
+                    # ANPR — throttled: only on stable frames, every OCR_EVERY_N_FRAMES
+                    state = self.state_manager.get_vehicle(vid)
+                    if (
+                        state is not None
+                        and state.frame_count >= 5
+                        and state.plate_confidence < 0.85
+                        and frame_num % settings.OCR_EVERY_N_FRAMES == 0
+                    ):
+                        # Crop from ORIGINAL frame for best OCR quality
+                        if scale < 1.0:
+                            x1 = int(vehicle.bbox[0] / scale)
+                            y1 = int(vehicle.bbox[1] / scale)
+                            x2 = int(vehicle.bbox[2] / scale)
+                            y2 = int(vehicle.bbox[3] / scale)
+                        else:
+                            x1, y1, x2, y2 = [int(c) for c in vehicle.bbox]
 
-                # Cleanup stale tracks — use large age so vehicles aren't lost before _save_results
+                        h_orig, w_orig = frame.shape[:2]
+                        x1 = max(0, x1); y1 = max(0, y1)
+                        x2 = min(w_orig, x2); y2 = min(h_orig, y2)
+                        vehicle_crop = frame[y1:y2, x1:x2]
+
+                        if vehicle_crop.size > 0:
+                            plate_img = self.plate_detector.detect(vehicle_crop)
+                            if plate_img is not None:
+                                plate_data = self.plate_reader.read_plate(plate_img)
+                                if plate_data:
+                                    self.state_manager.set_plate(
+                                        vid, plate_data.plate_number, plate_data.confidence
+                                    )
+
+                # Cleanup stale tracks
                 self.state_manager.cleanup_stale(
-                    max_age_frames=999999,  # video: keep all tracks until end
+                    max_age_frames=999999,
                     current_vehicle_ids=current_ids,
                 )
 
-                # ── Render ──
-                annotated = self.renderer.draw(
-                    frame,
-                    self.state_manager,
-                    roi_manager=self.roi_manager,
-                    frame_number=frame_num,
-                    video_fps=fps,
-                )
+                # ── Render on original-size frame ──────────────────────
+                # Scale bboxes back to original resolution for rendering
+                if scale < 1.0:
+                    annotated = self.renderer.draw(
+                        frame,
+                        self.state_manager,
+                        roi_manager=self.roi_manager,
+                        frame_number=frame_num,
+                        video_fps=fps,
+                        bbox_scale=1.0 / scale,
+                    )
+                else:
+                    annotated = self.renderer.draw(
+                        frame,
+                        self.state_manager,
+                        roi_manager=self.roi_manager,
+                        frame_number=frame_num,
+                        video_fps=fps,
+                    )
                 writer.write(annotated)
 
                 # Progress update
@@ -214,9 +274,12 @@ class TrafficPipeline:
         fps: float,
         total_frames: int,
     ) -> None:
-        """Persist vehicle data to DB and generate Excel report."""
-        import pandas as pd
-        from modules.data.analytics import compute_analytics_from_state
+        """Persist vehicle data to DB, then generate Excel from that same DB data.
+
+        Single source of truth: state_manager → DB → Excel + API.
+        """
+        from modules.data.analytics import compute_analytics
+        from modules.data.database import delete_vehicles_for_video
 
         # ── Fallback speed for vehicles that never crossed both ROI lines ──
         self._estimate_fallback_speeds(fps)
@@ -224,22 +287,48 @@ class TrafficPipeline:
         df = self.state_manager.export_to_dataframe()
         duration = total_frames / fps if fps > 0 else 0
 
-        # Build vehicle records list — convert datetime fields to strings for Excel
-        if not df.empty:
-            df_excel = df.copy()
-            for col in ("first_seen", "last_seen"):
-                if col in df_excel.columns:
-                    df_excel[col] = df_excel[col].apply(
-                        lambda v: v.strftime("%Y-%m-%d %H:%M:%S") if hasattr(v, "strftime") else (str(v) if v else "")
-                    )
-        else:
-            df_excel = df
-
+        # ── STEP 1: Save to DB (delete first to prevent duplicates on re-run) ──
+        delete_vehicles_for_video(video_id)
         vehicle_records = df.to_dict(orient="records") if not df.empty else []
         save_vehicles(video_id, vehicle_records)
+        logger.info(f"Saved {len(vehicle_records)} vehicles to DB for video {video_id}")
 
-        # Generate Excel
-        analytics = compute_analytics_from_state(self.state_manager)
+        # ── STEP 2: Update video status so DB is complete before Excel ──
+        total = len(vehicle_records)
+        update_video_status(
+            video_id,
+            "completed",
+            progress=100,
+            total_vehicles=total,
+            duration=duration,
+            fps=fps,
+            processed_video_path=output_path,
+        )
+
+        # ── STEP 3: Generate Excel FROM DB (same data the API serves) ──
+        from modules.data.database import get_vehicles_by_video
+        import pandas as pd
+
+        db_vehicles = get_vehicles_by_video(video_id)
+        analytics   = compute_analytics(video_id)   # reads from DB
+
+        # Build DataFrame from DB records (canonical format)
+        df_excel = pd.DataFrame([
+            {
+                "vehicle_id":   v["vehicle_unique_id"],
+                "vehicle_type": v["vehicle_type"],
+                "plate_number": v["plate_number"],
+                "avg_speed":    v["avg_speed"],
+                "max_speed":    v["max_speed"],
+                "overspeed":    v["overspeed_flag"],
+                "overspeed_flag": v["overspeed_flag"],
+                "first_seen":   str(v.get("first_seen_time") or ""),
+                "last_seen":    str(v.get("last_seen_time") or ""),
+                "frame_count":  v.get("frame_count", 0),
+            }
+            for v in db_vehicles
+        ])
+
         excel_path = os.path.join(
             settings.OUTPUT_DIR, f"report_video_{video_id}.xlsx"
         )
@@ -250,20 +339,13 @@ class TrafficPipeline:
             video_filename=os.path.basename(input_path),
         )
 
-        # Final DB status
-        total = len(self.state_manager.vehicles)
-        update_video_status(
-            video_id,
-            "completed",
-            progress=100,
-            total_vehicles=total,
-            duration=duration,
-            fps=fps,
-            processed_video_path=output_path,
-            excel_path=excel_path,
-        )
+        # ── STEP 4: Persist Excel path to DB ──
+        update_video_status(video_id, "completed", excel_path=excel_path)
+
         logger.info(
-            f"Results saved: {total} vehicles, excel={excel_path}"
+            f"Results saved: {total} vehicles | "
+            f"mAP avg_speed={analytics.get('avg_speed',0):.1f} km/h | "
+            f"excel={excel_path}"
         )
 
     def _estimate_fallback_speeds(self, fps: float) -> None:

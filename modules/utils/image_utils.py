@@ -48,7 +48,12 @@ def resize_image(image: np.ndarray, size: Tuple[int, int]) -> np.ndarray:
 def preprocess_plate(image: np.ndarray) -> np.ndarray:
     """Preprocess a license plate image for better OCR accuracy.
 
-    Pipeline: grayscale → bilateral filter → adaptive threshold → morphology.
+    Pipeline:
+      1. Upscale to standard height (keeps aspect ratio)
+      2. Grayscale
+      3. CLAHE (contrast limited adaptive histogram equalization)
+      4. Bilateral filter (noise reduction, edge preserving)
+      5. Adaptive threshold → clean binary image
 
     Args:
         image: Plate region image (BGR).
@@ -56,23 +61,75 @@ def preprocess_plate(image: np.ndarray) -> np.ndarray:
     Returns:
         Preprocessed grayscale image ready for OCR.
     """
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if image is None or image.size == 0:
+        return image
 
-    # Bilateral filter (noise reduction while preserving edges)
-    filtered = cv2.bilateralFilter(gray, 11, 17, 17)
+    # 1. Upscale — OCR works much better on larger images
+    h, w = image.shape[:2]
+    target_h = 64  # standard plate height for OCR
+    if h < target_h:
+        scale = target_h / h
+        new_w = int(w * scale)
+        image = cv2.resize(image, (new_w, target_h), interpolation=cv2.INTER_CUBIC)
 
-    # Adaptive threshold
-    thresh = cv2.adaptiveThreshold(
-        filtered, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
+    # 2. Grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
+
+    # 3. CLAHE — improves contrast on uneven lighting
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+    enhanced = clahe.apply(gray)
+
+    # 4. Bilateral filter — removes noise while keeping text edges sharp
+    filtered = cv2.bilateralFilter(enhanced, 9, 75, 75)
+
+    # 5. Adaptive threshold — handles varying illumination across the plate
+    binary = cv2.adaptiveThreshold(
+        filtered, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        15, 8
     )
 
-    # Morphological operations to clean up
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    # 6. Morphological close — fills small gaps in characters
+    kernel  = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
 
     return cleaned
+
+
+def preprocess_plate_variants(image: np.ndarray) -> list:
+    """Return multiple preprocessed variants of a plate image.
+
+    OCR is run on all variants and results are combined.
+    Returns list of images: [original_resized, binary, inverted_binary, gray_enhanced]
+    """
+    if image is None or image.size == 0:
+        return []
+
+    variants = []
+
+    # Upscale
+    h, w = image.shape[:2]
+    if h < 64:
+        scale = 64 / h
+        image = cv2.resize(image, (int(w * scale), 64), interpolation=cv2.INTER_CUBIC)
+
+    # Variant 1: original resized (color)
+    variants.append(image)
+
+    # Variant 2: standard binary
+    variants.append(preprocess_plate(image))
+
+    # Variant 3: inverted binary (white text on black bg)
+    binary = preprocess_plate(image)
+    variants.append(cv2.bitwise_not(binary))
+
+    # Variant 4: grayscale with CLAHE only (no threshold)
+    gray   = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
+    clahe  = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+    variants.append(clahe.apply(gray))
+
+    return variants
 
 
 def draw_text_with_bg(

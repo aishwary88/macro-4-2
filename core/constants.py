@@ -73,7 +73,9 @@ TRACK_HISTORY_LENGTH = 30       # Number of past positions to store
 # ========================================
 # Indian License Plate Regex Pattern
 # ========================================
-PLATE_REGEX = r'^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$'
+# Format: XX00XX0000 (state code + district number + series + registration)
+# Examples: MH12AB1234, DL3CAY2231, KA05MG1909
+PLATE_REGEX = r'^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$'
 
 # ========================================
 # Processing Status

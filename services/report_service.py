@@ -18,37 +18,36 @@ class ReportService:
 
     @staticmethod
     def generate_excel_report(video_id: int) -> str:
-        """Generate an Excel report for the given video; return its path."""
+        """Generate Excel report from DB data (single source of truth).
+        
+        Reads vehicles from DB → same data the API serves → writes Excel.
+        """
         from modules.data.database import get_vehicles_by_video
         import pandas as pd
 
-        analytics = compute_analytics(video_id)
+        analytics    = compute_analytics(video_id)   # from DB
         video_record = get_video(video_id)
-        filename = video_record.get("filename", f"video_{video_id}") if video_record else f"video_{video_id}"
+        filename     = video_record.get("filename", f"video_{video_id}") if video_record else f"video_{video_id}"
 
-        # Build dataframe from vehicle records
         vehicles = get_vehicles_by_video(video_id)
-        df_data = [
+        df = pd.DataFrame([
             {
-                "vehicle_id": v["vehicle_unique_id"],
-                "vehicle_type": v["vehicle_type"],
-                "plate_number": v["plate_number"],
-                "avg_speed": v["avg_speed"],
-                "max_speed": v["max_speed"],
-                "overspeed": v["overspeed_flag"],
-                "first_seen": str(v.get("first_seen_time", "")),
-                "last_seen": str(v.get("last_seen_time", "")),
-                "frame_count": v.get("frame_count", 0),
+                "vehicle_id":     v["vehicle_unique_id"],
+                "vehicle_type":   v["vehicle_type"],
+                "plate_number":   v["plate_number"],
+                "avg_speed":      v["avg_speed"],
+                "max_speed":      v["max_speed"],
+                "overspeed":      v["overspeed_flag"],
+                "overspeed_flag": v["overspeed_flag"],
+                "first_seen":     str(v.get("first_seen_time") or ""),
+                "last_seen":      str(v.get("last_seen_time") or ""),
+                "frame_count":    v.get("frame_count", 0),
             }
             for v in vehicles
-        ]
-        df = pd.DataFrame(df_data)
+        ])
 
         os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
-        excel_path = os.path.join(
-            settings.OUTPUT_DIR,
-            f"report_video_{video_id}.xlsx"
-        )
+        excel_path = os.path.join(settings.OUTPUT_DIR, f"report_video_{video_id}.xlsx")
 
         generate_excel_report(df, analytics, excel_path, video_filename=filename)
 
@@ -62,7 +61,7 @@ class ReportService:
         finally:
             session.close()
 
-        logger.info(f"Excel report saved → {excel_path}")
+        logger.info(f"Excel report saved → {excel_path} ({len(vehicles)} vehicles)")
         return excel_path
 
     @staticmethod

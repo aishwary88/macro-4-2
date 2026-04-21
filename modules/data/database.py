@@ -271,6 +271,30 @@ def save_vehicles(video_id: int, vehicle_data_list: list):
         session.close()
 
 
+def delete_vehicles_for_video(video_id: int) -> int:
+    """Delete all vehicle records for a video (used before re-save to prevent duplicates).
+
+    Args:
+        video_id: Video ID.
+
+    Returns:
+        Number of records deleted.
+    """
+    session = get_session()
+    try:
+        deleted = session.query(Vehicle).filter_by(video_id=video_id).delete()
+        session.commit()
+        if deleted:
+            logger.info(f"Deleted {deleted} existing vehicle records for video {video_id}")
+        return deleted
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Error deleting vehicles for video {video_id}: {e}")
+        return 0
+    finally:
+        session.close()
+
+
 def get_vehicles_by_video(video_id: int) -> list:
     """Get all vehicles for a video."""
     session = get_session()
