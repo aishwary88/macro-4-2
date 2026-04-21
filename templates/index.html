@@ -47,6 +47,7 @@
             <div class="kpi-label">Total Vehicles</div>
           </div>
         </div>
+        <div class="kpi-trend" id="trendVehicles"></div>
         <div class="kpi-glow kpi-glow-blue"></div>
       </div>
 
@@ -58,6 +59,7 @@
             <div class="kpi-label">Avg Speed (km/h)</div>
           </div>
         </div>
+        <div class="kpi-trend" id="trendSpeed"></div>
         <div class="kpi-glow kpi-glow-cyan"></div>
       </div>
 
@@ -69,10 +71,11 @@
             <div class="kpi-label">Plates Detected</div>
           </div>
         </div>
+        <div class="kpi-trend" id="trendPlates"></div>
         <div class="kpi-glow kpi-glow-purple"></div>
       </div>
 
-      <div class="kpi-card kpi-overspeed">
+      <div class="kpi-card kpi-overspeed" id="kpiOverspeedCard">
         <div class="kpi-left">
           <div class="kpi-icon-wrap kpi-icon-red">🚨</div>
           <div>
@@ -80,6 +83,7 @@
             <div class="kpi-label">Overspeed Events</div>
           </div>
         </div>
+        <div class="kpi-trend kpi-trend-danger" id="trendOverspeed"></div>
         <div class="kpi-glow kpi-glow-red"></div>
       </div>
 
@@ -214,7 +218,7 @@
       <div class="table-toolbar">
         <div class="search-wrap">
           <span class="search-icon">🔍</span>
-          <input class="search-input" id="plateSearch" type="text" placeholder="Search by plate number…" oninput="TableFilter.apply()" />
+          <input class="search-input" id="plateSearch" type="text" placeholder="Search by plate or vehicle ID…" oninput="TableFilter.apply()" />
         </div>
         <div class="filter-btns">
           <button class="filter-btn active" id="filterAll"       onclick="TableFilter.set('all')">All</button>
@@ -237,9 +241,26 @@
             </tr>
           </thead>
           <tbody id="vehicleTableBody">
-            <tr><td colspan="6" class="empty-row">No results yet — upload a video to begin.</td></tr>
+            <tr><td colspan="6" class="empty-row">
+              <div class="empty-state">
+                <div class="empty-icon">📂</div>
+                <div class="empty-title">No results yet</div>
+                <div class="empty-sub">Upload a video above to start analysis</div>
+              </div>
+            </td></tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Video Preview (shown after processing) -->
+      <div class="video-preview hidden" id="videoPreview">
+        <div class="vp-header">
+          <span class="vp-title">🎬 Processed Video Preview</span>
+          <button class="btn btn-ghost btn-sm" onclick="VideoPreview.toggle()">⛶ Expand</button>
+        </div>
+        <video id="processedVideo" class="vp-player" controls preload="metadata">
+          Your browser does not support video playback.
+        </video>
       </div>
 
     </section>

@@ -7,10 +7,11 @@
 const AppState = {
   currentVideoId: null,
   pollerTimer:    null,
-  allVehicles:    [],       // full vehicle list for client-side filter
-  filterMode:     'all',    // 'all' | 'overspeed' | 'normal'
+  allVehicles:    [],
+  filterMode:     'all',
   sortKey:        null,
   sortAsc:        true,
+  prevKPIs:       {},
 };
 
 // ── API ───────────────────────────────────────────────────────
@@ -67,11 +68,45 @@ function animateTo(id, target, suffix='') {
 }
 
 function updateKPIs(data) {
-  animateTo('totalVehiclesVal', data.total_vehicles || 0);
-  animateTo('avgSpeedVal',      Math.round(data.avg_speed || 0));
-  animateTo('overspeedVal',     data.overspeed_count || 0);
-  const plates = data.vehicles_with_plates ?? data.plates_detected ?? 0;
-  animateTo('platesVal', plates);
+  const prev = AppState.prevKPIs || {};
+
+  const vals = {
+    totalVehiclesVal: data.total_vehicles || 0,
+    avgSpeedVal:      Math.round(data.avg_speed || 0),
+    overspeedVal:     data.overspeed_count || 0,
+    platesVal:        data.vehicles_with_plates ?? data.plates_detected ?? 0,
+  };
+
+  animateTo('totalVehiclesVal', vals.totalVehiclesVal);
+  animateTo('avgSpeedVal',      vals.avgSpeedVal);
+  animateTo('overspeedVal',     vals.overspeedVal);
+  animateTo('platesVal',        vals.platesVal);
+
+  // Trend indicators
+  const trends = [
+    ['trendVehicles', vals.totalVehiclesVal, prev.totalVehiclesVal, false],
+    ['trendSpeed',    vals.avgSpeedVal,      prev.avgSpeedVal,      false],
+    ['trendPlates',   vals.platesVal,        prev.platesVal,        false],
+    ['trendOverspeed',vals.overspeedVal,     prev.overspeedVal,     true],
+  ];
+  trends.forEach(([id, cur, old, isDanger]) => {
+    const el = document.getElementById(id);
+    if (!el || old === undefined) return;
+    const diff = cur - old;
+    if (diff === 0) { el.classList.remove('visible'); return; }
+    el.textContent = (diff > 0 ? '↑ +' : '↓ ') + Math.abs(diff);
+    el.style.color = isDanger ? (diff > 0 ? 'var(--red)' : 'var(--green)') : (diff > 0 ? 'var(--green)' : 'var(--text2)');
+    el.classList.add('visible');
+  });
+
+  // Overspeed card pulse
+  const card = document.getElementById('kpiOverspeedCard');
+  if (card) {
+    if (vals.overspeedVal > 0) card.classList.add('has-overspeed');
+    else card.classList.remove('has-overspeed');
+  }
+
+  AppState.prevKPIs = vals;
 }
 
 // ── Tab Manager ───────────────────────────────────────────────
@@ -154,6 +189,11 @@ const StatusPoller = {
         pct.textContent = p + '%';
         txt.textContent = `${d.status} — ${p}%`;
 
+        // Live KPI update while processing (partial results)
+        if (d.status === 'processing' && d.total_vehicles > 0) {
+          updateKPIs({ total_vehicles: d.total_vehicles, avg_speed: 0, overspeed_count: 0, plates_detected: 0 });
+        }
+
         if (d.status === 'completed') {
           clearInterval(AppState.pollerTimer);
           txt.textContent = '✓ Completed!';
@@ -195,9 +235,12 @@ const TableFilter = {
     if (AppState.filterMode === 'overspeed') list = list.filter(v => v.status === 'overspeed');
     if (AppState.filterMode === 'normal')    list = list.filter(v => v.status !== 'overspeed');
 
-    // Search by plate
+    // Search by plate or vehicle ID
     const q = (document.getElementById('plateSearch')?.value || '').trim().toUpperCase();
-    if (q) list = list.filter(v => (v.plate_number || '').toUpperCase().includes(q));
+    if (q) list = list.filter(v =>
+      (v.plate_number || '').toUpperCase().includes(q) ||
+      String(v.vehicle_unique_id).includes(q)
+    );
 
     // Sort
     if (AppState.sortKey) {
@@ -236,6 +279,32 @@ const TableFilter = {
   },
 };
 
+// ── Video Preview ─────────────────────────────────────────────
+const VideoPreview = {
+  show(videoId) {
+    const section = document.getElementById('videoPreview');
+    const player  = document.getElementById('processedVideo');
+    if (!section || !player) return;
+    player.src = `/api/download/video/${videoId}`;
+    section.classList.remove('hidden');
+  },
+  hide() {
+    const section = document.getElementById('videoPreview');
+    const player  = document.getElementById('processedVideo');
+    if (section) section.classList.add('hidden');
+    if (player)  { player.pause(); player.src = ''; }
+  },
+  toggle() {
+    const player = document.getElementById('processedVideo');
+    if (!player) return;
+    if (player.style.maxHeight === 'none') {
+      player.style.maxHeight = '280px';
+    } else {
+      player.style.maxHeight = 'none';
+    }
+  },
+};
+
 // ── Results Renderer ──────────────────────────────────────────
 const ResultsRenderer = {
   async load(id) {
@@ -245,6 +314,8 @@ const ResultsRenderer = {
       AppState.allVehicles = vehicles || [];
       TableFilter.apply();
       updateKPIs(analytics);
+      // Show video preview
+      VideoPreview.show(id);
     } catch (err) {
       Toast.err('Failed to load results: ' + err.message);
     }
