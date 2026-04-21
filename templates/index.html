@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SentrySpeed — AI Traffic Analyzer</title>
+  <title>SentrySpeed — Traffic Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Lucide Icons (lightweight, consistent) -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
@@ -14,331 +16,385 @@
   <header class="navbar">
     <div class="navbar-inner">
       <div class="nav-brand">
-        <div class="nav-logo">
-          <span class="logo-icon">🚦</span>
-          <div>
-            <span class="logo-name">SentrySpeed</span>
-            <span class="logo-ver">v2.0</span>
-          </div>
+        <div class="nav-logo-mark">
+          <i data-lucide="activity" class="logo-icon-svg"></i>
         </div>
-        <div class="nav-divider"></div>
-        <span class="nav-tagline">AI Traffic Analyzer</span>
-      </div>
-      <div class="nav-actions">
+        <div class="nav-logo-text">
+          <span class="logo-name">SentrySpeed</span>
+          <span class="logo-ver">v2.0</span>
+        </div>
+        <div class="nav-sep"></div>
         <div class="nav-status" id="systemStatus">
           <span class="status-dot"></span>
-          <span class="status-text">ONLINE</span>
+          <span class="status-label">Online</span>
         </div>
-        <button class="nav-btn" onclick="TabManager.show('upload')">📤 Upload</button>
-        <button class="nav-btn nav-btn-primary" onclick="TabManager.show('camera')">📷 Live Camera</button>
+      </div>
+
+      <nav class="nav-links">
+        <button class="nav-link active" id="navUpload" onclick="TabManager.show('upload')">
+          <i data-lucide="upload-cloud"></i> Upload
+        </button>
+        <button class="nav-link" id="navCamera" onclick="TabManager.show('camera')">
+          <i data-lucide="camera"></i> Live Camera
+        </button>
+        <button class="nav-link" id="navHistory" onclick="TabManager.show('history')">
+          <i data-lucide="clock"></i> History
+        </button>
+      </nav>
+
+      <div class="nav-right">
+        <button class="theme-toggle" id="themeToggle" onclick="ThemeManager.toggle()" title="Toggle theme">
+          <i data-lucide="moon" id="themeIconDark"></i>
+          <i data-lucide="sun"  id="themeIconLight" style="display:none"></i>
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- ═══ KPI CARDS ════════════════════════════════════════════ -->
-  <section class="kpi-section">
-    <div class="kpi-grid">
+  <!-- ═══ PAGE WRAPPER ═════════════════════════════════════════ -->
+  <div class="page-wrapper">
 
-      <div class="kpi-card kpi-vehicles">
-        <div class="kpi-left">
-          <div class="kpi-icon-wrap kpi-icon-blue">🚗</div>
-          <div>
-            <div class="kpi-value" id="totalVehiclesVal">0</div>
-            <div class="kpi-label">Total Vehicles</div>
-          </div>
+    <!-- ═══ KPI ROW ══════════════════════════════════════════════ -->
+    <section class="kpi-row">
+
+      <div class="kpi-card">
+        <div class="kpi-icon-box kpi-blue">
+          <i data-lucide="car"></i>
         </div>
-        <div class="kpi-trend" id="trendVehicles"></div>
-        <div class="kpi-glow kpi-glow-blue"></div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="totalVehiclesVal">0</div>
+          <div class="kpi-label">Total Vehicles</div>
+        </div>
+        <div class="kpi-delta hidden" id="deltaVehicles"></div>
       </div>
 
-      <div class="kpi-card kpi-speed">
-        <div class="kpi-left">
-          <div class="kpi-icon-wrap kpi-icon-cyan">⚡</div>
-          <div>
-            <div class="kpi-value" id="avgSpeedVal">0</div>
-            <div class="kpi-label">Avg Speed (km/h)</div>
-          </div>
+      <div class="kpi-card">
+        <div class="kpi-icon-box kpi-cyan">
+          <i data-lucide="gauge"></i>
         </div>
-        <div class="kpi-trend" id="trendSpeed"></div>
-        <div class="kpi-glow kpi-glow-cyan"></div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="avgSpeedVal">0</div>
+          <div class="kpi-label">Avg Speed (km/h)</div>
+        </div>
+        <div class="kpi-delta hidden" id="deltaSpeed"></div>
       </div>
 
-      <div class="kpi-card kpi-plates">
-        <div class="kpi-left">
-          <div class="kpi-icon-wrap kpi-icon-purple">🔢</div>
-          <div>
-            <div class="kpi-value" id="platesVal">0</div>
-            <div class="kpi-label">Plates Detected</div>
-          </div>
+      <div class="kpi-card">
+        <div class="kpi-icon-box kpi-purple">
+          <i data-lucide="scan-line"></i>
         </div>
-        <div class="kpi-trend" id="trendPlates"></div>
-        <div class="kpi-glow kpi-glow-purple"></div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="platesVal">0</div>
+          <div class="kpi-label">Plates Detected</div>
+        </div>
+        <div class="kpi-delta hidden" id="deltaPlates"></div>
       </div>
 
-      <div class="kpi-card kpi-overspeed" id="kpiOverspeedCard">
-        <div class="kpi-left">
-          <div class="kpi-icon-wrap kpi-icon-red">🚨</div>
-          <div>
-            <div class="kpi-value kpi-danger" id="overspeedVal">0</div>
-            <div class="kpi-label">Overspeed Events</div>
-          </div>
+      <div class="kpi-card kpi-card-danger" id="kpiOverspeedCard">
+        <div class="kpi-icon-box kpi-red">
+          <i data-lucide="alert-triangle"></i>
         </div>
-        <div class="kpi-trend kpi-trend-danger" id="trendOverspeed"></div>
-        <div class="kpi-glow kpi-glow-red"></div>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- ═══ MAIN SPLIT ═══════════════════════════════════════════ -->
-  <main class="main-split">
-
-    <!-- ── LEFT: Input Panel ─────────────────────────────────── -->
-    <aside class="input-panel">
-
-      <nav class="tab-nav" role="tablist">
-        <button class="tab-btn active" id="tabUpload"  onclick="TabManager.show('upload')"  role="tab" aria-selected="true">📤 Upload</button>
-        <button class="tab-btn"        id="tabCamera"  onclick="TabManager.show('camera')"  role="tab" aria-selected="false">📷 Camera</button>
-        <button class="tab-btn"        id="tabHistory" onclick="TabManager.show('history')" role="tab" aria-selected="false">📋 History</button>
-      </nav>
-
-      <!-- Upload Tab -->
-      <div class="tab-panel active" id="panelUpload" role="tabpanel">
-        <div class="drop-zone" id="dropZone"
-             ondragover="FileUploader.onDragOver(event)"
-             ondragleave="FileUploader.onDragLeave(event)"
-             ondrop="FileUploader.onDrop(event)"
-             onclick="document.getElementById('fileInput').click()">
-          <div class="drop-icon">📁</div>
-          <p class="drop-title">Drop video here or click to browse</p>
-          <p class="drop-hint">MP4 · AVI · MOV · MKV — max 2GB</p>
-          <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none" onchange="FileUploader.onFileSelect(event)" />
+        <div class="kpi-body">
+          <div class="kpi-value kpi-val-danger" id="overspeedVal">0</div>
+          <div class="kpi-label">Overspeed Events</div>
         </div>
-
-        <div class="progress-block hidden" id="uploadProgress">
-          <div class="progress-header">
-            <span id="uploadStatusText">Uploading…</span>
-            <span class="progress-pct" id="uploadPct">0%</span>
-          </div>
-          <div class="progress-track"><div class="progress-fill" id="uploadBar"></div></div>
-        </div>
-
-        <div class="progress-block hidden" id="procProgress">
-          <div class="progress-header">
-            <span id="procStatusText">Processing…</span>
-            <span class="progress-pct" id="procPct">0%</span>
-          </div>
-          <div class="progress-track"><div class="progress-fill progress-glow" id="procBar"></div></div>
-        </div>
-      </div>
-
-      <!-- Camera Tab -->
-      <div class="tab-panel" id="panelCamera" role="tabpanel">
-        <div class="cam-source-row">
-          <label class="field-label">Camera Source</label>
-          <input class="field-input" type="text" id="cameraSource" placeholder="0  or  http://192.168.x.x:8080/video" value="0" />
-          <small class="field-hint">0 = laptop webcam · URL = phone camera</small>
-        </div>
-        <div class="cam-btn-row">
-          <button class="btn btn-green" id="btnStartCam" onclick="CameraManager.start()">▶ Start</button>
-          <button class="btn btn-red"   id="btnStopCam"  onclick="CameraManager.stop()" disabled>■ Stop</button>
-        </div>
-        <div class="cam-frame" id="cameraFrame">
-          <img id="cameraStream" src="" alt="Live feed" class="hidden" />
-          <div class="cam-placeholder" id="cameraPlaceholder">
-            <span class="cam-placeholder-icon">📷</span>
-            <span>Camera inactive</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- History Tab -->
-      <div class="tab-panel" id="panelHistory" role="tabpanel">
-        <div class="history-toolbar">
-          <span class="section-label">Recent Videos</span>
-          <button class="btn btn-ghost btn-sm" onclick="HistoryManager.refresh()">↻ Refresh</button>
-        </div>
-        <div id="historyList" class="history-list">
-          <p class="empty-hint">No videos processed yet.</p>
-        </div>
-      </div>
-
-    </aside>
-
-    <!-- ── RIGHT: Results Panel ──────────────────────────────── -->
-    <section class="results-panel">
-
-      <!-- Results Header -->
-      <div class="results-header">
-        <div class="results-title-row">
-          <h2 class="results-title">Analysis Results</h2>
-          <span class="results-badge" id="resultVideoId"></span>
-        </div>
-        <div class="download-row" id="downloadRow" style="display:none">
-          <button class="btn btn-primary" onclick="Downloader.excel()">📊 Excel</button>
-          <button class="btn btn-ghost"   onclick="Downloader.video()">🎬 Video</button>
-        </div>
-      </div>
-
-      <!-- Vehicle Type Breakdown -->
-      <div class="type-grid">
-        <div class="type-card">
-          <span class="type-icon">🚗</span>
-          <span class="type-val" id="anaCars">—</span>
-          <span class="type-lbl">Cars</span>
-        </div>
-        <div class="type-card">
-          <span class="type-icon">🚛</span>
-          <span class="type-val" id="anaTrucks">—</span>
-          <span class="type-lbl">Trucks</span>
-        </div>
-        <div class="type-card">
-          <span class="type-icon">🚌</span>
-          <span class="type-val" id="anaBuses">—</span>
-          <span class="type-lbl">Buses</span>
-        </div>
-        <div class="type-card">
-          <span class="type-icon">🏍️</span>
-          <span class="type-val" id="anaBikes">—</span>
-          <span class="type-lbl">Bikes</span>
-        </div>
-        <div class="type-card type-danger">
-          <span class="type-icon">⚠️</span>
-          <span class="type-val" id="anaOverPct">—</span>
-          <span class="type-lbl">Overspeed %</span>
-        </div>
-        <div class="type-card type-speed">
-          <span class="type-icon">🏁</span>
-          <span class="type-val" id="anaMaxSpeed">—</span>
-          <span class="type-lbl">Max Speed</span>
-        </div>
-      </div>
-
-      <!-- Table Toolbar: Search + Filter -->
-      <div class="table-toolbar">
-        <div class="search-wrap">
-          <span class="search-icon">🔍</span>
-          <input class="search-input" id="plateSearch" type="text" placeholder="Search by plate or vehicle ID…" oninput="TableFilter.apply()" />
-        </div>
-        <div class="filter-btns">
-          <button class="filter-btn active" id="filterAll"       onclick="TableFilter.set('all')">All</button>
-          <button class="filter-btn"        id="filterOverspeed" onclick="TableFilter.set('overspeed')">🔴 Overspeed</button>
-          <button class="filter-btn"        id="filterNormal"    onclick="TableFilter.set('normal')">🟢 Normal</button>
-        </div>
-      </div>
-
-      <!-- Vehicle Table -->
-      <div class="table-wrap">
-        <table class="vtable">
-          <thead>
-            <tr>
-              <th onclick="TableFilter.sort('id')"      class="sortable">ID ↕</th>
-              <th onclick="TableFilter.sort('type')"    class="sortable">Type ↕</th>
-              <th>Plate</th>
-              <th onclick="TableFilter.sort('avg')"     class="sortable">Avg Speed ↕</th>
-              <th onclick="TableFilter.sort('max')"     class="sortable">Max Speed ↕</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="vehicleTableBody">
-            <tr><td colspan="6" class="empty-row">
-              <div class="empty-state">
-                <div class="empty-icon">📂</div>
-                <div class="empty-title">No results yet</div>
-                <div class="empty-sub">Upload a video above to start analysis</div>
-              </div>
-            </td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Video Preview (shown after processing) -->
-      <div class="video-preview hidden" id="videoPreview">
-        <div class="vp-header">
-          <span class="vp-title">🎬 Processed Video Preview</span>
-          <button class="btn btn-ghost btn-sm" onclick="VideoPreview.toggle()">⛶ Expand</button>
-        </div>
-        <video id="processedVideo" class="vp-player" controls preload="metadata">
-          Your browser does not support video playback.
-        </video>
+        <div class="kpi-delta hidden" id="deltaOverspeed"></div>
       </div>
 
     </section>
-  </main>
 
-  <!-- ═══ MODEL PERFORMANCE ════════════════════════════════════ -->
-  <section class="model-section">
-    <div class="model-section-inner">
+    <!-- ═══ MAIN GRID ════════════════════════════════════════════ -->
+    <div class="main-grid">
 
+      <!-- ── LEFT PANEL ─────────────────────────────────────────── -->
+      <aside class="left-panel">
+
+        <!-- Upload Tab -->
+        <div class="tab-panel active" id="panelUpload">
+          <div class="panel-header">
+            <span class="panel-title">Upload Video</span>
+          </div>
+
+          <div class="drop-zone" id="dropZone"
+               ondragover="FileUploader.onDragOver(event)"
+               ondragleave="FileUploader.onDragLeave(event)"
+               ondrop="FileUploader.onDrop(event)"
+               onclick="document.getElementById('fileInput').click()">
+            <div class="drop-icon-wrap">
+              <i data-lucide="upload-cloud" class="drop-icon-svg"></i>
+            </div>
+            <p class="drop-title">Drop video here or click to browse</p>
+            <p class="drop-hint">MP4 · AVI · MOV · MKV — max 2 GB</p>
+            <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none" onchange="FileUploader.onFileSelect(event)" />
+          </div>
+
+          <!-- Upload progress -->
+          <div class="progress-card hidden" id="uploadProgress">
+            <div class="progress-row">
+              <span class="progress-label" id="uploadStatusText">Uploading…</span>
+              <span class="progress-pct" id="uploadPct">0%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="uploadBar"></div>
+            </div>
+          </div>
+
+          <!-- Processing progress -->
+          <div class="progress-card hidden" id="procProgress">
+            <div class="progress-row">
+              <span class="progress-label" id="procStatusText">Processing…</span>
+              <span class="progress-pct" id="procPct">0%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill progress-animated" id="procBar"></div>
+            </div>
+            <div class="progress-steps">
+              <span class="step" id="stepDetect">Detection</span>
+              <span class="step-sep">›</span>
+              <span class="step" id="stepTrack">Tracking</span>
+              <span class="step-sep">›</span>
+              <span class="step" id="stepSpeed">Speed</span>
+              <span class="step-sep">›</span>
+              <span class="step" id="stepOCR">OCR</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Camera Tab -->
+        <div class="tab-panel hidden" id="panelCamera">
+          <div class="panel-header">
+            <span class="panel-title">Live Camera</span>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Camera Source</label>
+            <input class="field-input" type="text" id="cameraSource" placeholder="0  or  http://192.168.x.x:8080/video" value="0" />
+            <span class="field-hint">0 = laptop webcam · URL = phone/IP camera</span>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btnStartCam" onclick="CameraManager.start()">
+              <i data-lucide="play"></i> Start Stream
+            </button>
+            <button class="btn btn-danger" id="btnStopCam" onclick="CameraManager.stop()" disabled>
+              <i data-lucide="square"></i> Stop
+            </button>
+          </div>
+          <div class="cam-frame" id="cameraFrame">
+            <img id="cameraStream" src="" alt="Live feed" class="hidden" />
+            <div class="cam-placeholder" id="cameraPlaceholder">
+              <i data-lucide="camera-off" class="cam-off-icon"></i>
+              <span>Camera inactive</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- History Tab -->
+        <div class="tab-panel hidden" id="panelHistory">
+          <div class="panel-header">
+            <span class="panel-title">History</span>
+            <button class="btn btn-ghost btn-sm" onclick="HistoryManager.refresh()">
+              <i data-lucide="refresh-cw"></i> Refresh
+            </button>
+          </div>
+          <div id="historyList" class="history-list">
+            <div class="empty-state">
+              <i data-lucide="inbox" class="empty-icon-svg"></i>
+              <p class="empty-title">No videos yet</p>
+              <p class="empty-sub">Processed videos will appear here</p>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- ── RIGHT PANEL ────────────────────────────────────────── -->
+      <section class="right-panel">
+
+        <!-- Results header -->
+        <div class="results-header">
+          <div class="results-title-row">
+            <h2 class="results-title">Analysis Results</h2>
+            <span class="results-vid-badge hidden" id="resultVideoId"></span>
+          </div>
+          <div class="results-actions hidden" id="downloadRow">
+            <button class="btn btn-ghost btn-sm" onclick="Downloader.excel()">
+              <i data-lucide="file-spreadsheet"></i> Excel
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="Downloader.video()">
+              <i data-lucide="film"></i> Video
+            </button>
+          </div>
+        </div>
+
+        <!-- Type breakdown -->
+        <div class="type-grid">
+          <div class="type-card">
+            <i data-lucide="car" class="type-icon"></i>
+            <span class="type-val" id="anaCars">—</span>
+            <span class="type-lbl">Cars</span>
+          </div>
+          <div class="type-card">
+            <i data-lucide="truck" class="type-icon"></i>
+            <span class="type-val" id="anaTrucks">—</span>
+            <span class="type-lbl">Trucks</span>
+          </div>
+          <div class="type-card">
+            <i data-lucide="bus" class="type-icon"></i>
+            <span class="type-val" id="anaBuses">—</span>
+            <span class="type-lbl">Buses</span>
+          </div>
+          <div class="type-card">
+            <i data-lucide="bike" class="type-icon"></i>
+            <span class="type-val" id="anaBikes">—</span>
+            <span class="type-lbl">Bikes</span>
+          </div>
+          <div class="type-card type-card-danger">
+            <i data-lucide="alert-octagon" class="type-icon type-icon-danger"></i>
+            <span class="type-val type-val-danger" id="anaOverPct">—</span>
+            <span class="type-lbl">Overspeed %</span>
+          </div>
+          <div class="type-card type-card-accent">
+            <i data-lucide="flag-triangle-right" class="type-icon type-icon-accent"></i>
+            <span class="type-val type-val-accent" id="anaMaxSpeed">—</span>
+            <span class="type-lbl">Max Speed</span>
+          </div>
+        </div>
+
+        <!-- Table toolbar -->
+        <div class="table-toolbar">
+          <div class="search-box">
+            <i data-lucide="search" class="search-icon-svg"></i>
+            <input class="search-input" id="plateSearch" type="text"
+                   placeholder="Search plate or vehicle ID…"
+                   oninput="TableFilter.apply()" />
+          </div>
+          <div class="filter-group">
+            <button class="filter-pill active" id="filterAll"       onclick="TableFilter.set('all')">All</button>
+            <button class="filter-pill"        id="filterOverspeed" onclick="TableFilter.set('overspeed')">Overspeed</button>
+            <button class="filter-pill"        id="filterNormal"    onclick="TableFilter.set('normal')">Normal</button>
+          </div>
+        </div>
+
+        <!-- Vehicle table -->
+        <div class="table-wrap">
+          <table class="vtable">
+            <thead>
+              <tr>
+                <th class="th-sort" onclick="TableFilter.sort('id')">
+                  ID <i data-lucide="chevrons-up-down" class="sort-icon"></i>
+                </th>
+                <th class="th-sort" onclick="TableFilter.sort('type')">
+                  Type <i data-lucide="chevrons-up-down" class="sort-icon"></i>
+                </th>
+                <th>Plate</th>
+                <th class="th-sort" onclick="TableFilter.sort('avg')">
+                  Avg Speed <i data-lucide="chevrons-up-down" class="sort-icon"></i>
+                </th>
+                <th class="th-sort" onclick="TableFilter.sort('max')">
+                  Max Speed <i data-lucide="chevrons-up-down" class="sort-icon"></i>
+                </th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="vehicleTableBody">
+              <tr>
+                <td colspan="6" class="empty-cell">
+                  <div class="empty-state">
+                    <i data-lucide="folder-open" class="empty-icon-svg"></i>
+                    <p class="empty-title">No results yet</p>
+                    <p class="empty-sub">Upload a video to start analysis</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Video preview -->
+        <div class="video-preview hidden" id="videoPreview">
+          <div class="vp-header">
+            <div class="vp-title-row">
+              <i data-lucide="film"></i>
+              <span>Processed Video</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="VideoPreview.toggle()">
+              <i data-lucide="maximize-2"></i>
+            </button>
+          </div>
+          <video id="processedVideo" class="vp-player" controls preload="metadata"></video>
+        </div>
+
+      </section>
+    </div>
+
+    <!-- ═══ MODEL PERFORMANCE ════════════════════════════════════ -->
+    <section class="model-section">
       <div class="section-header">
         <div>
-          <h2 class="section-title">📊 Model Performance</h2>
-          <p class="section-sub">YOLOv8n Plate Detector — Training Results</p>
+          <h2 class="section-title">Model Performance</h2>
+          <p class="section-sub">YOLOv8n Plate Detector — Training Metrics</p>
         </div>
-        <span class="epoch-badge" id="metricsBestEpoch"></span>
+        <span class="epoch-pill" id="metricsBestEpoch"></span>
       </div>
 
-      <!-- Model KPI Cards -->
       <div class="model-kpi-grid">
-        <div class="model-kpi">
-          <div class="mkpi-top">
-            <span class="mkpi-icon">🎯</span>
-            <span class="mkpi-val" id="mPrecision">—</span>
+        <div class="model-kpi-card">
+          <div class="mkpi-header">
+            <i data-lucide="crosshair" class="mkpi-icon"></i>
+            <span class="mkpi-label">Precision</span>
           </div>
-          <div class="mkpi-label">Precision</div>
-          <div class="mkpi-track"><div class="mkpi-fill mkpi-cyan"  id="mPrecisionBar"></div></div>
+          <div class="mkpi-val" id="mPrecision">—</div>
+          <div class="mkpi-track"><div class="mkpi-bar mkpi-bar-blue"   id="mPrecisionBar"></div></div>
         </div>
-        <div class="model-kpi">
-          <div class="mkpi-top">
-            <span class="mkpi-icon">🔍</span>
-            <span class="mkpi-val" id="mRecall">—</span>
+        <div class="model-kpi-card">
+          <div class="mkpi-header">
+            <i data-lucide="search" class="mkpi-icon"></i>
+            <span class="mkpi-label">Recall</span>
           </div>
-          <div class="mkpi-label">Recall</div>
-          <div class="mkpi-track"><div class="mkpi-fill mkpi-green" id="mRecallBar"></div></div>
+          <div class="mkpi-val" id="mRecall">—</div>
+          <div class="mkpi-track"><div class="mkpi-bar mkpi-bar-green"  id="mRecallBar"></div></div>
         </div>
-        <div class="model-kpi model-kpi-star">
-          <div class="mkpi-top">
-            <span class="mkpi-icon">⭐</span>
-            <span class="mkpi-val" id="mMap50">—</span>
+        <div class="model-kpi-card model-kpi-featured">
+          <div class="mkpi-header">
+            <i data-lucide="star" class="mkpi-icon"></i>
+            <span class="mkpi-label">mAP@50</span>
           </div>
-          <div class="mkpi-label">mAP@50</div>
-          <div class="mkpi-track"><div class="mkpi-fill mkpi-purple" id="mMap50Bar"></div></div>
+          <div class="mkpi-val" id="mMap50">—</div>
+          <div class="mkpi-track"><div class="mkpi-bar mkpi-bar-primary" id="mMap50Bar"></div></div>
         </div>
-        <div class="model-kpi">
-          <div class="mkpi-top">
-            <span class="mkpi-icon">📐</span>
-            <span class="mkpi-val" id="mMap5095">—</span>
+        <div class="model-kpi-card">
+          <div class="mkpi-header">
+            <i data-lucide="ruler" class="mkpi-icon"></i>
+            <span class="mkpi-label">mAP@50-95</span>
           </div>
-          <div class="mkpi-label">mAP@50-95</div>
-          <div class="mkpi-track"><div class="mkpi-fill mkpi-orange" id="mMap5095Bar"></div></div>
+          <div class="mkpi-val" id="mMap5095">—</div>
+          <div class="mkpi-track"><div class="mkpi-bar mkpi-bar-orange" id="mMap5095Bar"></div></div>
         </div>
       </div>
 
-      <!-- Chart Tabs + Images -->
       <div class="chart-tabs">
         <button class="ctab active" id="ctabResults" onclick="MetricsUI.showChart('results')">All Metrics</button>
-        <button class="ctab"        id="ctabLoss"    onclick="MetricsUI.showChart('loss')">Loss Curve</button>
-        <button class="ctab"        id="ctabMap"     onclick="MetricsUI.showChart('map')">mAP Curve</button>
+        <button class="ctab"        id="ctabLoss"    onclick="MetricsUI.showChart('loss')">Loss</button>
+        <button class="ctab"        id="ctabMap"     onclick="MetricsUI.showChart('map')">mAP</button>
         <button class="ctab"        id="ctabPr"      onclick="MetricsUI.showChart('pr')">Precision / Recall</button>
       </div>
       <div class="chart-box">
         <img id="chartResults" src="/static/metrics/results.png"          class="chart-img active" alt="All metrics" />
-        <img id="chartLoss"    src="/static/metrics/loss_curve.png"       class="chart-img"        alt="Loss curve" />
-        <img id="chartMap"     src="/static/metrics/map_curve.png"        class="chart-img"        alt="mAP curve" />
+        <img id="chartLoss"    src="/static/metrics/loss_curve.png"       class="chart-img"        alt="Loss" />
+        <img id="chartMap"     src="/static/metrics/map_curve.png"        class="chart-img"        alt="mAP" />
         <img id="chartPr"      src="/static/metrics/precision_recall.png" class="chart-img"        alt="Precision Recall" />
       </div>
+    </section>
 
-    </div>
-  </section>
+    <!-- ═══ FOOTER ═══════════════════════════════════════════════ -->
+    <footer class="footer">
+      <span>SentrySpeed v2.0 &nbsp;·&nbsp; YOLOv8 + ByteTrack + EasyOCR</span>
+    </footer>
 
-  <!-- ═══ FOOTER ═══════════════════════════════════════════════ -->
-  <footer class="footer">
-    <span>SentrySpeed v2.0 · AI-Powered Traffic Analysis · YOLOv8 + ByteTrack + EasyOCR</span>
-  </footer>
+  </div><!-- /page-wrapper -->
 
-  <!-- Toast -->
   <div id="toastContainer" aria-live="polite"></div>
 
   <script src="/static/js/app.js"></script>
+  <script>lucide.createIcons();</script>
 </body>
 </html>
