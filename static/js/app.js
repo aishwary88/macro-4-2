@@ -10,7 +10,11 @@
 // ── State ──────────────────────────────────────────────────────
 const AppState = {
   currentVideoId: null,
-  pollerTimer: null,
+  pollerTimer:    null,
+  allVehicles:    [],
+  filterMode:     'all',
+  sortKey:        null,
+  sortAsc:        true,
 };
 
 // ── API helpers ────────────────────────────────────────────────
@@ -208,8 +212,13 @@ const ResultsRenderer = {
       ]);
 
       this._fillAnalytics(analytics);
-      this._fillTable(vehicles);
+      // Store for filter/search
+      AppState.allVehicles = vehicles || [];
+      TableFilter.apply();
       StatsAnimator.update(analytics);
+      // Update max speed top card
+      const ms = document.getElementById('maxSpeedVal');
+      if (ms) ms.textContent = Math.round(analytics.max_speed || 0);
     } catch (err) {
       NotificationSystem.error('Failed to load results: ' + err.message);
     }
@@ -224,28 +233,71 @@ const ResultsRenderer = {
     set('anaOverPct', (a.overspeed_percentage || 0).toFixed(1) + '%');
     set('anaMaxSpeed', (a.max_speed || 0).toFixed(1) + ' km/h');
   },
+};
 
-  _fillTable(vehicles) {
-    const tbody = document.getElementById('vehicleTableBody');
-    if (!vehicles || vehicles.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No vehicles detected.</td></tr>';
-      return;
+// ── Table Filter / Sort / Search ──────────────────────────────
+const TableFilter = {
+  set(mode) {
+    AppState.filterMode = mode;
+    document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+    const map = { all: 'filterAll', overspeed: 'filterOverspeed', normal: 'filterNormal' };
+    document.getElementById(map[mode])?.classList.add('active');
+    this.apply();
+  },
+
+  sort(key) {
+    if (AppState.sortKey === key) AppState.sortAsc = !AppState.sortAsc;
+    else { AppState.sortKey = key; AppState.sortAsc = true; }
+    this.apply();
+  },
+
+  apply() {
+    let list = [...(AppState.allVehicles || [])];
+
+    // Filter by status
+    if (AppState.filterMode === 'overspeed') list = list.filter(v => v.status === 'overspeed');
+    if (AppState.filterMode === 'normal')    list = list.filter(v => v.status !== 'overspeed');
+
+    // Search by plate or vehicle ID
+    const q = (document.getElementById('plateSearch')?.value || '').trim().toUpperCase();
+    if (q) list = list.filter(v =>
+      (v.plate_number || '').toUpperCase().includes(q) ||
+      String(v.vehicle_unique_id).includes(q)
+    );
+
+    // Sort
+    if (AppState.sortKey) {
+      const km = { id: 'vehicle_unique_id', type: 'vehicle_type', avg: 'avg_speed', max: 'max_speed' };
+      const k = km[AppState.sortKey];
+      list.sort((a, b) => {
+        const av = a[k], bv = b[k];
+        if (typeof av === 'number') return AppState.sortAsc ? av - bv : bv - av;
+        return AppState.sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+      });
     }
 
+    this._render(list);
+  },
+
+  _render(vehicles) {
+    const tbody = document.getElementById('vehicleTableBody');
+    if (!vehicles || vehicles.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No vehicles match the filter.</td></tr>';
+      return;
+    }
     tbody.innerHTML = vehicles.map(v => {
       const isOver = v.status === 'overspeed';
-      const statusBadge = isOver
+      const badge = isOver
         ? '<span class="status-badge status-overspeed">Overspeed</span>'
         : '<span class="status-badge status-normal">Normal</span>';
-      return `
-        <tr class="${isOver ? 'row-overspeed' : ''}" onclick="VehicleDetailModal.show(${v.vehicle_unique_id})">
-          <td>${v.vehicle_unique_id}</td>
-          <td>${v.vehicle_type}</td>
-          <td>${v.plate_number || '—'}</td>
-          <td>${(v.avg_speed || 0).toFixed(1)} km/h</td>
-          <td>${(v.max_speed || 0).toFixed(1)} km/h</td>
-          <td>${statusBadge}</td>
-        </tr>`;
+      return `<tr class="${isOver ? 'row-overspeed' : ''}" onclick="VehicleDetailModal.show(${v.vehicle_unique_id})">
+        <td>${v.vehicle_unique_id}</td>
+        <td>${v.vehicle_type}</td>
+        <td>${v.plate_number || '—'}</td>
+        <td>${(v.avg_speed || 0).toFixed(1)} km/h</td>
+        <td>${(v.max_speed || 0).toFixed(1)} km/h</td>
+        <td>${badge}</td>
+      </tr>`;
     }).join('');
   },
 };
