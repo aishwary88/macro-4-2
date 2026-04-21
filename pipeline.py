@@ -166,9 +166,9 @@ class TrafficPipeline:
                                     vid, plate_data.plate_number, plate_data.confidence
                                 )
 
-                # Cleanup stale tracks
+                # Cleanup stale tracks — use large age so vehicles aren't lost before _save_results
                 self.state_manager.cleanup_stale(
-                    max_age_frames=settings.MAX_TRACK_AGE,
+                    max_age_frames=999999,  # video: keep all tracks until end
                     current_vehicle_ids=current_ids,
                 )
 
@@ -218,10 +218,23 @@ class TrafficPipeline:
         import pandas as pd
         from modules.data.analytics import compute_analytics_from_state
 
+        # ── Fallback speed for vehicles that never crossed both ROI lines ──
+        self._estimate_fallback_speeds(fps)
+
         df = self.state_manager.export_to_dataframe()
         duration = total_frames / fps if fps > 0 else 0
 
-        # Build vehicle records list
+        # Build vehicle records list — convert datetime fields to strings for Excel
+        if not df.empty:
+            df_excel = df.copy()
+            for col in ("first_seen", "last_seen"):
+                if col in df_excel.columns:
+                    df_excel[col] = df_excel[col].apply(
+                        lambda v: v.strftime("%Y-%m-%d %H:%M:%S") if hasattr(v, "strftime") else (str(v) if v else "")
+                    )
+        else:
+            df_excel = df
+
         vehicle_records = df.to_dict(orient="records") if not df.empty else []
         save_vehicles(video_id, vehicle_records)
 
@@ -231,7 +244,7 @@ class TrafficPipeline:
             settings.OUTPUT_DIR, f"report_video_{video_id}.xlsx"
         )
         generate_excel_report(
-            vehicle_df=df,
+            vehicle_df=df_excel,
             analytics=analytics,
             output_path=excel_path,
             video_filename=os.path.basename(input_path),
@@ -252,3 +265,62 @@ class TrafficPipeline:
         logger.info(
             f"Results saved: {total} vehicles, excel={excel_path}"
         )
+
+    def _estimate_fallback_speeds(self, fps: float) -> None:
+        """For vehicles that never crossed both ROI lines, estimate speed from
+        pixel displacement across their tracked positions.
+
+        This ensures vehicles that enter/exit from the sides or are only
+        partially in frame still get a meaningful speed estimate.
+
+        Args:
+            fps: Video frames per second.
+        """
+        if fps <= 0:
+            return
+
+        # pixels per meter from calibrator
+        ppm = self.calibrator.pixels_per_meter
+        if ppm <= 0:
+            return
+
+        for vid, state in self.state_manager.vehicles.items():
+            # Only apply fallback if no speed was measured via ROI
+            if state.speed_history:
+                continue
+
+            # Need at least 2 position samples
+            if len(state.positions) < 2:
+                continue
+
+            # Calculate total pixel displacement over all tracked positions
+            total_px = 0.0
+            for i in range(1, len(state.positions)):
+                x0, y0, _ = state.positions[i - 1]
+                x1, y1, _ = state.positions[i]
+                total_px += ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+
+            # Time span from first to last position
+            t_start = state.positions[0][2]
+            t_end = state.positions[-1][2]
+            time_span = t_end - t_start
+
+            if time_span <= 0:
+                continue
+
+            # Convert to real-world speed
+            total_meters = total_px / ppm
+            speed_mps = total_meters / time_span
+            speed_kmh = round(speed_mps * 3.6, 2)
+
+            # Sanity cap
+            if speed_kmh > 300:
+                speed_kmh = 300.0
+            if speed_kmh < 0:
+                speed_kmh = 0.0
+
+            self.state_manager.set_speed(vid, speed_kmh)
+            logger.debug(
+                f"Fallback speed for vehicle {vid}: {speed_kmh:.1f} km/h "
+                f"(px={total_px:.0f}, m={total_meters:.1f}, t={time_span:.2f}s)"
+            )

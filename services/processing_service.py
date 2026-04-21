@@ -92,50 +92,49 @@ class ProcessingService:
 
     @staticmethod
     def _update_camera_stats(state_mgr) -> None:
-        """Calculate and update camera stats from vehicle state manager."""
+        """Calculate and update camera stats from vehicle state manager.
+        
+        Shows stats for currently visible vehicles only (those with a current bbox).
+        """
         global _camera_stats
         try:
-            vehicles = state_mgr.vehicles
-            if not vehicles:
-                _camera_stats = {
-                    "total_vehicles": 0,
-                    "avg_speed": 0.0,
-                    "overspeed_count": 0,
-                    "plates_detected": 0,
-                    "cars": 0,
-                    "trucks": 0,
-                    "buses": 0,
-                    "bikes": 0,
-                }
-                return
+            # Only count vehicles currently visible in the frame
+            active_vehicles = {
+                vid: v for vid, v in state_mgr.vehicles.items()
+                if v.current_bbox is not None
+            }
+            all_vehicles = state_mgr.vehicles
 
             speeds = []
             overspeed_count = 0
             plates_detected = 0
             vehicle_types = {"Car": 0, "Truck": 0, "Bus": 0, "Bike": 0}
 
-            for vid, vdata in vehicles.items():
-                # Count speeds (access VehicleState object attributes, not dict keys)
-                if vdata.speed is not None:
+            for vid, vdata in all_vehicles.items():
+                # Use full speed_history for a stable average
+                if vdata.speed_history:
+                    avg = sum(vdata.speed_history) / len(vdata.speed_history)
+                    speeds.append(avg)
+                    if vdata.overspeed:
+                        overspeed_count += 1
+                elif vdata.speed is not None:
                     speeds.append(vdata.speed)
-                    logger.debug(f"Vehicle {vid}: speed={vdata.speed} km/h, type={vdata.vehicle_type}, plate={vdata.plate}")
-                    if vdata.speed > settings.SPEED_LIMIT_KMH:
+                    if vdata.overspeed:
                         overspeed_count += 1
 
-                # Count plates (access VehicleState.plate attribute)
                 if vdata.plate:
                     plates_detected += 1
 
-                # Count vehicle types (access VehicleState.vehicle_type attribute)
-                vehicle_type = vdata.vehicle_type or "Car"
-                vehicle_types[vehicle_type] = vehicle_types.get(vehicle_type, 0) + 1
+                vtype = vdata.vehicle_type or "Car"
+                vehicle_types[vtype] = vehicle_types.get(vtype, 0) + 1
 
-            avg_speed = sum(speeds) / len(speeds) if speeds else 0.0
+            avg_speed = round(sum(speeds) / len(speeds), 1) if speeds else 0.0
 
             with _camera_lock:
                 _camera_stats = {
-                    "total_vehicles": len(vehicles),
-                    "avg_speed": round(avg_speed, 2),
+                    "total_vehicles": len(all_vehicles),
+                    "active_vehicles": len(active_vehicles),
+                    "avg_speed": avg_speed,
                     "overspeed_count": overspeed_count,
                     "plates_detected": plates_detected,
                     "cars": vehicle_types.get("Car", 0),
@@ -143,118 +142,198 @@ class ProcessingService:
                     "buses": vehicle_types.get("Bus", 0),
                     "bikes": vehicle_types.get("Bike", 0),
                 }
-                logger.debug(f"Camera stats updated: total={len(vehicles)}, speeds_calculated={len(speeds)}, avg_speed={avg_speed}, overspeed={overspeed_count}")
         except Exception as e:
             logger.error(f"Error updating camera stats: {e}", exc_info=True)
 
 
 def _run_camera_loop(camera_source) -> None:
-    """Background thread: captures frames from camera/URL, runs detection, updates _current_frame.
-    
+    """Background thread: captures frames, runs full detection+tracking+speed pipeline.
+
     Args:
         camera_source: Either int (camera index) or str (camera URL)
     """
     global _camera_active, _current_frame
     import cv2
+    import threading as _threading
     from modules.detection.detector import VehicleDetector
     from modules.tracking.tracker import VehicleTracker
     from modules.tracking.vehicle_state import VehicleStateManager
     from modules.classification.classifier import VehicleClassifier
     from modules.calibration.roi_manager import ROIManager
+    from modules.calibration.calibrator import Calibrator
+    from modules.speed.speed_estimator import SpeedEstimator
     from modules.visualization.renderer import FrameRenderer
-    from modules.utils.geometry import bbox_center
+    from modules.utils.geometry import bbox_center, bbox_bottom_center
 
     try:
-        # Convert string to int if it's a numeric index
+        # ── Open capture ──────────────────────────────────────────────
         if isinstance(camera_source, str) and camera_source.isdigit():
             camera_index = int(camera_source)
         else:
             camera_index = camera_source
-        
-        # For IP camera URLs, try to connect with proper MJPEG streaming options
-        if isinstance(camera_index, str) and (camera_index.startswith("http") or camera_index.startswith("rtsp")):
-            logger.info(f"Connecting to IP camera stream: {camera_index}")
-            # Create VideoCapture with specific CAP_PROP options for IP streams
-            cap = cv2.VideoCapture(camera_index)
-            # Set buffer size to 1 to get latest frame (reduces lag)
+
+        is_url = isinstance(camera_index, str) and (
+            camera_index.startswith("http") or camera_index.startswith("rtsp")
+        )
+
+        cap = cv2.VideoCapture(camera_index)
+        if is_url:
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        else:
-            # Local camera device
-            cap = cv2.VideoCapture(camera_index)
-        
+
         if not cap.isOpened():
-            source_str = f"'{camera_source}'" if isinstance(camera_source, str) else f"index {camera_source}"
-            logger.error(f"Cannot open camera {source_str}. Make sure it's accessible and properly formatted.")
-            logger.error(f"Verify: Phone camera is running, same WiFi network, correct IP and port in URL")
+            logger.error(
+                f"Cannot open camera source: '{camera_source}'. "
+                f"Check that the camera is connected / URL is reachable."
+            )
             _camera_active = False
             return
 
-        detector = VehicleDetector(confidence_threshold=settings.DETECTION_CONFIDENCE)
-        tracker = VehicleTracker()
+        # ── Detect real FPS from capture ──────────────────────────────
+        real_fps = cap.get(cv2.CAP_PROP_FPS)
+        if not real_fps or real_fps <= 0 or real_fps > 120:
+            real_fps = 30.0   # safe default for webcams and phone streams
+        logger.info(f"Camera FPS detected: {real_fps:.1f}")
+
+        # ── Frame dimensions ──────────────────────────────────────────
+        frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
+        frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
+
+        # ── Thread-safe frame buffer ──────────────────────────────────
+        _frame_lock = _threading.Lock()
+        _latest_frame = [None]
+        _reader_active = [True]
+
+        def _reader_thread():
+            while _reader_active[0] and _camera_active:
+                ret, frm = cap.read()
+                if ret and frm is not None:
+                    with _frame_lock:
+                        _latest_frame[0] = frm
+                else:
+                    time.sleep(0.01)
+
+        reader = _threading.Thread(target=_reader_thread, daemon=True, name="cam-reader")
+        reader.start()
+
+        # ── Pipeline components ───────────────────────────────────────
+        detector  = VehicleDetector(confidence_threshold=settings.DETECTION_CONFIDENCE)
+        tracker   = VehicleTracker(frame_rate=int(real_fps))
         state_mgr = VehicleStateManager()
         classifier = VehicleClassifier()
+
+        # ROI lines at 35% and 65% of frame height (same as video pipeline)
+        line_a_y = int(frame_h * 0.35)
+        line_b_y = int(frame_h * 0.65)
         roi_mgr = ROIManager(
-            line_a_y=settings.ROI_LINE_A_Y,
-            line_b_y=settings.ROI_LINE_B_Y,
+            line_a_y=line_a_y,
+            line_b_y=line_b_y,
             known_distance=settings.ROI_DISTANCE_METERS,
         )
+        roi_mgr.frame_width = frame_w
+
+        calibrator = Calibrator()
+        calibrator.compute_pixels_per_meter(line_a_y, line_b_y, settings.ROI_DISTANCE_METERS)
+
+        speed_estimator = SpeedEstimator(
+            roi_manager=roi_mgr,
+            calibrator=calibrator,
+            state_manager=state_mgr,
+        )
+
         renderer = FrameRenderer(debug=settings.DEBUG)
 
+        logger.info(
+            f"Camera loop started: source={camera_source}, "
+            f"size={frame_w}x{frame_h}, fps={real_fps:.1f}, "
+            f"ROI lines: A={line_a_y}px B={line_b_y}px, "
+            f"distance={settings.ROI_DISTANCE_METERS}m"
+        )
+
         frame_num = 0
-        fps = cap.get(cv2.CAP_PROP_FPS) or settings.CAMERA_FPS
-        frame_skip = settings.CAMERA_FRAME_SKIP
-        frame_interval = 1.0 / settings.CAMERA_FPS  # Target frame interval in seconds
+        frame_interval = 1.0 / real_fps
         last_process_time = time.time()
         last_stats_update = time.time()
+        last_cleanup_time = time.time()
 
-        source_type = "URL" if isinstance(camera_source, str) and (camera_source.startswith("http") or camera_source.startswith("rtsp")) else "Device Index"
-        logger.info(f"Camera loop started: Source={camera_source} ({source_type}), FPS={settings.CAMERA_FPS}, confidence_threshold={settings.DETECTION_CONFIDENCE}")
+        # Wait for first frame
+        for _ in range(50):
+            with _frame_lock:
+                if _latest_frame[0] is not None:
+                    break
+            time.sleep(0.05)
 
         while _camera_active:
-            ret, frame = cap.read()
-            if not ret:
-                logger.warning("Camera read failed; retrying...")
-                continue
-
-            # Skip frames if configured
-            if frame_skip > 0 and frame_num % (frame_skip + 1) != 0:
-                frame_num += 1
-                continue
-
-            # Throttle to target FPS
-            current_time = time.time()
-            time_since_last = current_time - last_process_time
-            if time_since_last < frame_interval:
-                time.sleep(frame_interval - time_since_last)
+            # ── Throttle to real FPS ──────────────────────────────────
+            now = time.time()
+            elapsed = now - last_process_time
+            if elapsed < frame_interval:
+                time.sleep(frame_interval - elapsed)
             last_process_time = time.time()
 
-            timestamp = frame_num / settings.CAMERA_FPS
+            # ── Grab latest frame ─────────────────────────────────────
+            with _frame_lock:
+                frame = _latest_frame[0]
+            if frame is None:
+                continue
+            frame = frame.copy()
+
+            # ── Timestamp based on real wall-clock time ───────────────
+            timestamp = frame_num / real_fps
+
+            # ── Detection + Tracking ──────────────────────────────────
             detections = detector.detect(frame)
-            tracked = tracker.update(detections)
+            tracked    = tracker.update(detections)
+            current_ids = {v.vehicle_id for v in tracked}
 
-            if len(tracked) > 0:
-                logger.debug(f"Frame {frame_num}: Detected {len(tracked)} vehicles")
-
+            # ── Per-vehicle state update ──────────────────────────────
             for v in tracked:
+                vid    = v.vehicle_id
                 center = bbox_center(v.bbox)
-                state_mgr.update_position(v.vehicle_id, center, timestamp, v.bbox, v.confidence)
-                state_mgr.set_vehicle_type(v.vehicle_id, classifier.classify(v.class_name))
+                bottom = bbox_bottom_center(v.bbox)
 
-            annotated = renderer.draw(frame, state_mgr, roi_manager=roi_mgr, frame_number=frame_num, video_fps=settings.CAMERA_FPS)
+                state_mgr.update_position(vid, center, timestamp, v.bbox, v.confidence)
+                state_mgr.set_vehicle_type(vid, classifier.classify(v.class_name))
 
-            _, buffer = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                # Speed via ROI line crossing (uses bottom-center for accuracy)
+                prev_pos = state_mgr.get_previous_position(vid)
+                if prev_pos is not None:
+                    speed_data = speed_estimator.update(vid, prev_pos, center, timestamp)
+                    if speed_data and speed_data.speed_kmh is not None:
+                        state_mgr.set_speed(vid, speed_data.speed_kmh)
+
+            # ── Cleanup stale tracks every 2 seconds ──────────────────
+            if now - last_cleanup_time >= 2.0:
+                state_mgr.cleanup_stale(
+                    max_age_frames=settings.MAX_TRACK_AGE,
+                    current_vehicle_ids=current_ids,
+                )
+                last_cleanup_time = now
+
+            # ── Render annotated frame ────────────────────────────────
+            annotated = renderer.draw(
+                frame, state_mgr,
+                roi_manager=roi_mgr,
+                frame_number=frame_num,
+                video_fps=real_fps,
+            )
+
+            _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75])
             with _camera_lock:
-                _current_frame = buffer.tobytes()
+                _current_frame = buf.tobytes()
 
-            # Update stats every 0.5 seconds
-            if current_time - last_stats_update >= 0.5:
+            # ── Update stats every 0.5 s ──────────────────────────────
+            if now - last_stats_update >= 0.5:
                 ProcessingService._update_camera_stats(state_mgr)
-                last_stats_update = current_time
+                last_stats_update = now
 
             frame_num += 1
 
+        # ── Cleanup ───────────────────────────────────────────────────
+        _reader_active[0] = False
+        reader.join(timeout=2.0)
         cap.release()
         logger.info("Camera stream stopped.")
+
     except Exception as e:
-        logger.error(f"Error in camera loop: {e}", exc_info=True)
+        logger.error(f"Camera loop error: {e}", exc_info=True)
         _camera_active = False

@@ -224,9 +224,30 @@ def save_vehicles(video_id: int, vehicle_data_list: list):
         video_id: Video ID.
         vehicle_data_list: List of dicts with vehicle info.
     """
+    if not vehicle_data_list:
+        logger.warning(f"save_vehicles called with empty list for video {video_id}")
+        return
+
     session = get_session()
     try:
         for vdata in vehicle_data_list:
+            # Handle first_seen / last_seen — may be datetime or string
+            first_seen = vdata.get("first_seen")
+            last_seen = vdata.get("last_seen")
+            if isinstance(first_seen, str):
+                try:
+                    first_seen = datetime.fromisoformat(first_seen) if first_seen else None
+                except ValueError:
+                    first_seen = None
+            if isinstance(last_seen, str):
+                try:
+                    last_seen = datetime.fromisoformat(last_seen) if last_seen else None
+                except ValueError:
+                    last_seen = None
+
+            # Support both "overspeed" and "overspeed_flag" key names
+            overspeed = vdata.get("overspeed_flag", vdata.get("overspeed", False))
+
             vehicle = Vehicle(
                 video_id=video_id,
                 vehicle_unique_id=vdata.get("vehicle_id", 0),
@@ -234,9 +255,9 @@ def save_vehicles(video_id: int, vehicle_data_list: list):
                 plate_number=vdata.get("plate_number", "N/A"),
                 avg_speed=vdata.get("avg_speed", 0.0),
                 max_speed=vdata.get("max_speed", 0.0),
-                overspeed_flag=vdata.get("overspeed", False),
-                first_seen_time=vdata.get("first_seen"),
-                last_seen_time=vdata.get("last_seen"),
+                overspeed_flag=bool(overspeed),
+                first_seen_time=first_seen,
+                last_seen_time=last_seen,
                 frame_count=vdata.get("frame_count", 0),
             )
             session.add(vehicle)
@@ -245,7 +266,7 @@ def save_vehicles(video_id: int, vehicle_data_list: list):
         logger.info(f"Saved {len(vehicle_data_list)} vehicles for video {video_id}")
     except Exception as e:
         session.rollback()
-        logger.error(f"Error saving vehicles: {e}")
+        logger.error(f"Error saving vehicles: {e}", exc_info=True)
     finally:
         session.close()
 

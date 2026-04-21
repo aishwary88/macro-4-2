@@ -73,11 +73,11 @@ const StatsAnimator = {
     }, 16);
   },
   update(analytics) {
-    this.animateTo('totalVehiclesVal', analytics.total_vehicles);
+    this.animateTo('totalVehiclesVal', analytics.total_vehicles || 0);
     this.animateTo('avgSpeedVal', Math.round(analytics.avg_speed || 0));
-    this.animateTo('overspeedVal', analytics.overspeed_count);
-    // Count plates: vehicles with non-null plates
-    const plates = analytics.vehicles_with_plates || 0;
+    this.animateTo('overspeedVal', analytics.overspeed_count || 0);
+    // Support both video results (vehicles_with_plates) and camera stats (plates_detected)
+    const plates = analytics.vehicles_with_plates ?? analytics.plates_detected ?? 0;
     this.animateTo('platesVal', plates);
   },
 };
@@ -332,18 +332,39 @@ const CameraManager = {
       try {
         const response = await API.cameraStats();
         if (response.data) {
-          const analytics = response.data;
-          StatsAnimator.update(analytics);
+          const s = response.data;
+          // Update top stat cards
+          StatsAnimator.update({
+            total_vehicles:    s.total_vehicles    || 0,
+            avg_speed:         s.avg_speed         || 0,
+            overspeed_count:   s.overspeed_count   || 0,
+            plates_detected:   s.plates_detected   || 0,
+          });
+          // Update analysis result cards
+          const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+          set('anaCars',     s.cars    || 0);
+          set('anaTrucks',   s.trucks  || 0);
+          set('anaBuses',    s.buses   || 0);
+          set('anaBikes',    s.bikes   || 0);
+          set('anaOverPct',  s.total_vehicles > 0
+            ? ((s.overspeed_count / s.total_vehicles) * 100).toFixed(1) + '%'
+            : '0.0%');
+          // Max speed: track it ourselves since API gives avg
+          if (s.avg_speed > (CameraManager._maxSpeed || 0)) {
+            CameraManager._maxSpeed = s.avg_speed;
+          }
+          set('anaMaxSpeed', (CameraManager._maxSpeed || 0).toFixed(1) + ' km/h');
         }
       } catch (err) {
         console.error('Stats polling error:', err);
       }
-    }, 500); // Poll every 500ms for stats
+    }, 500);
   },
 
   async stop() {
     try {
       this.isStreaming = false;
+      this._maxSpeed = 0;
       if (this.streamInterval) {
         clearInterval(this.streamInterval);
         this.streamInterval = null;

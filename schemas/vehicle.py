@@ -7,8 +7,8 @@ from typing import Optional, List
 class SpeedLogEntry(BaseModel):
     timestamp: float
     speed: float
-    position_x: float
-    position_y: float
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
 
 
 class VehicleResponse(BaseModel):

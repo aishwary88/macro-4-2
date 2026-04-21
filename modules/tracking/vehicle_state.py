@@ -44,6 +44,7 @@ class VehicleState:
     first_seen: Optional[datetime] = None
     last_seen: Optional[datetime] = None
     frame_count: int = 0
+    frames_absent: int = 0   # frames since last seen in current_vehicle_ids
 
     # Current bounding box
     current_bbox: Optional[Tuple[float, float, float, float]] = None
@@ -236,8 +237,11 @@ class VehicleStateManager:
     def cleanup_stale(self, max_age_frames: int = 30, current_vehicle_ids: set = None):
         """Remove vehicles that haven't been seen recently.
 
+        For video processing: only removes definite noise (1-2 frame detections).
+        For camera mode: removes vehicles absent for more than max_age_frames.
+
         Args:
-            max_age_frames: Maximum frames since last seen to keep.
+            max_age_frames: Frames of absence before a vehicle is removed.
             current_vehicle_ids: Set of currently visible vehicle IDs.
         """
         if current_vehicle_ids is None:
@@ -245,8 +249,14 @@ class VehicleStateManager:
 
         stale_ids = []
         for vid, state in self.vehicles.items():
-            if vid not in current_vehicle_ids and state.frame_count < max_age_frames:
-                stale_ids.append(vid)
+            if vid in current_vehicle_ids:
+                # Reset absence counter for visible vehicles
+                state.frames_absent = 0
+            else:
+                state.frames_absent += 1
+                # Remove if absent too long OR was just noise (1-2 frames total)
+                if state.frames_absent > max_age_frames or state.frame_count <= 2:
+                    stale_ids.append(vid)
 
         for vid in stale_ids:
             del self.vehicles[vid]
@@ -274,8 +284,9 @@ class VehicleStateManager:
                 "avg_speed": round(avg_speed, 2),
                 "max_speed": round(state.max_speed, 2),
                 "overspeed": state.overspeed,
-                "first_seen": state.first_seen.strftime("%Y-%m-%d %H:%M:%S") if state.first_seen else "",
-                "last_seen": state.last_seen.strftime("%Y-%m-%d %H:%M:%S") if state.last_seen else "",
+                "overspeed_flag": state.overspeed,  # alias used by save_vehicles
+                "first_seen": state.first_seen,  # keep as datetime for DB
+                "last_seen": state.last_seen,    # keep as datetime for DB
                 "frame_count": state.frame_count,
             })
 

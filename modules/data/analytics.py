@@ -53,6 +53,9 @@ def compute_analytics(video_id: int) -> dict:
         "max_speed": max_speed,
         "min_speed": min_speed,
         "duration": video.get("duration", 0) if video else 0,
+        "vehicles_with_plates": sum(
+            1 for v in vehicles if v.get("plate_number") and v.get("plate_number") != "N/A"
+        ),
     }
 
     logger.info(

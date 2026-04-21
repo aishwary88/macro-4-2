@@ -29,6 +29,7 @@ class VideoResultsResponse(BaseModel):
     avg_speed: float
     max_speed: float
     min_speed: float
+    vehicles_with_plates: Optional[int] = 0
     vehicles_per_minute: Optional[float] = None
     peak_traffic_time: Optional[str] = None
 

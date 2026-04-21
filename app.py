@@ -143,6 +143,7 @@ async def get_video_results(video_id: int):
         avg_speed=analytics.get("avg_speed", 0.0),
         max_speed=analytics.get("max_speed", 0.0),
         min_speed=analytics.get("min_speed", 0.0),
+        vehicles_with_plates=analytics.get("vehicles_with_plates", 0),
     )
 
 
