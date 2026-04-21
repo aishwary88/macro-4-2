@@ -1,250 +1,263 @@
 /* ============================================================
-   SentrySpeed — app.js
-   Modular JS: TabManager · FileUploader · StatusPoller ·
-               ResultsRenderer · CameraManager · HistoryManager ·
-               Downloader · StatsAnimator · NotificationSystem
+   SentrySpeed — app.js  (Professional Dashboard)
    ============================================================ */
-
 'use strict';
 
-// ── State ──────────────────────────────────────────────────────
+// ── App State ─────────────────────────────────────────────────
 const AppState = {
   currentVideoId: null,
   pollerTimer:    null,
+  allVehicles:    [],       // full vehicle list for client-side filter
+  filterMode:     'all',    // 'all' | 'overspeed' | 'normal'
+  sortKey:        null,
+  sortAsc:        true,
 };
 
-// ── API helpers ────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────
 const API = {
   async upload(file) {
     const fd = new FormData();
     fd.append('file', file);
-    const resp = await fetch('/api/upload', { method: 'POST', body: fd });
-    if (!resp.ok) throw new Error((await resp.json()).detail || 'Upload failed');
-    return resp.json();
+    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Upload failed');
+    return r.json();
   },
-  async status(videoId)   { return (await fetch(`/api/status/${videoId}`)).json(); },
-  async results(videoId)  { return (await fetch(`/api/results/${videoId}`)).json(); },
-  async vehicles(videoId) { return (await fetch(`/api/vehicles/${videoId}`)).json(); },
-  async videos()          { return (await fetch('/api/videos')).json(); },
-  async startCamera(source = '0') { 
-    const url = `/api/camera/start?camera_source=${encodeURIComponent(source)}`;
-    return (await fetch(url, { method: 'POST' })).json(); 
+  async status(id)   { return (await fetch(`/api/status/${id}`)).json(); },
+  async results(id)  { return (await fetch(`/api/results/${id}`)).json(); },
+  async vehicles(id) { return (await fetch(`/api/vehicles/${id}`)).json(); },
+  async videos()     { return (await fetch('/api/videos')).json(); },
+  async startCamera(src) {
+    return (await fetch(`/api/camera/start?camera_source=${encodeURIComponent(src)}`, { method:'POST' })).json();
   },
-  async stopCamera()      { return (await fetch('/api/camera/stop', { method: 'POST' })).json(); },
-  async cameraStats()     { return (await fetch('/api/camera/stats')).json(); },
+  async stopCamera() { return (await fetch('/api/camera/stop', { method:'POST' })).json(); },
+  async cameraStats(){ return (await fetch('/api/camera/stats')).json(); },
 };
 
-// ── Toast Notifications ───────────────────────────────────────
-const NotificationSystem = {
-  show(message, type = 'info', duration = 4000) {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
+// ── Toast ─────────────────────────────────────────────────────
+const Toast = {
+  show(msg, type='info', ms=4000) {
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.textContent = msg;
+    c.appendChild(t);
     setTimeout(() => {
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateX(30px)';
-      toast.style.transition = 'all 0.3s ease';
-      setTimeout(() => toast.remove(), 300);
-    }, duration);
+      t.style.cssText = 'opacity:0;transform:translateX(30px);transition:all .3s ease';
+      setTimeout(() => t.remove(), 300);
+    }, ms);
   },
-  success(msg) { this.show(msg, 'success'); },
-  error(msg)   { this.show(msg, 'error'); },
-  info(msg)    { this.show(msg, 'info'); },
+  ok(m)   { this.show(m,'success'); },
+  err(m)  { this.show(m,'error'); },
+  info(m) { this.show(m,'info'); },
 };
 
-// ── Stats Animator ────────────────────────────────────────────
-const StatsAnimator = {
-  animateTo(elId, target, suffix = '') {
-    const el = document.getElementById(elId);
-    if (!el) return;
-    const start = parseInt(el.textContent) || 0;
-    const diff  = target - start;
-    const steps = 30;
-    let step = 0;
-    const timer = setInterval(() => {
-      step++;
-      el.textContent = Math.round(start + diff * (step / steps)) + suffix;
-      if (step >= steps) {
-        el.textContent = target + suffix;
-        clearInterval(timer);
-      }
-    }, 16);
-  },
-  update(analytics) {
-    this.animateTo('totalVehiclesVal', analytics.total_vehicles || 0);
-    this.animateTo('avgSpeedVal', Math.round(analytics.avg_speed || 0));
-    this.animateTo('overspeedVal', analytics.overspeed_count || 0);
-    // Support both video results (vehicles_with_plates) and camera stats (plates_detected)
-    const plates = analytics.vehicles_with_plates ?? analytics.plates_detected ?? 0;
-    this.animateTo('platesVal', plates);
-  },
-};
+// ── Animated Counter ──────────────────────────────────────────
+function animateTo(id, target, suffix='') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const start = parseFloat(el.textContent) || 0;
+  const diff  = target - start;
+  const steps = 30;
+  let s = 0;
+  const t = setInterval(() => {
+    s++;
+    el.textContent = Math.round(start + diff * (s/steps)) + suffix;
+    if (s >= steps) { el.textContent = target + suffix; clearInterval(t); }
+  }, 16);
+}
+
+function updateKPIs(data) {
+  animateTo('totalVehiclesVal', data.total_vehicles || 0);
+  animateTo('avgSpeedVal',      Math.round(data.avg_speed || 0));
+  animateTo('overspeedVal',     data.overspeed_count || 0);
+  const plates = data.vehicles_with_plates ?? data.plates_detected ?? 0;
+  animateTo('platesVal', plates);
+}
 
 // ── Tab Manager ───────────────────────────────────────────────
 const TabManager = {
-  show(tabName) {
-    const panels = document.querySelectorAll('.tab-panel');
-    const buttons = document.querySelectorAll('.tab-btn');
-    panels.forEach(p => p.classList.remove('active'));
-    buttons.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
-
-    const panel = document.getElementById(`panel${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
-    const btn   = document.getElementById(`tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+  show(name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
+    const panel = document.getElementById(`panel${name[0].toUpperCase()+name.slice(1)}`);
+    const btn   = document.getElementById(`tab${name[0].toUpperCase()+name.slice(1)}`);
     if (panel) panel.classList.add('active');
-    if (btn) { btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); }
-
-    if (tabName === 'history') HistoryManager.refresh();
+    if (btn)   { btn.classList.add('active'); btn.setAttribute('aria-selected','true'); }
+    if (name === 'history') HistoryManager.refresh();
   },
 };
 
 // ── File Uploader ─────────────────────────────────────────────
 const FileUploader = {
-  onDragOver(e) {
-    e.preventDefault();
-    document.getElementById('dropZone').classList.add('dragover');
-  },
+  onDragOver(e)  { e.preventDefault(); document.getElementById('dropZone').classList.add('dragover'); },
   onDragLeave()  { document.getElementById('dropZone').classList.remove('dragover'); },
   onDrop(e) {
     e.preventDefault();
     document.getElementById('dropZone').classList.remove('dragover');
-    const file = e.dataTransfer.files[0];
-    if (file) this._upload(file);
+    const f = e.dataTransfer.files[0];
+    if (f) this._upload(f);
   },
-  onFileSelect(e) {
-    const file = e.target.files[0];
-    if (file) this._upload(file);
-  },
+  onFileSelect(e) { const f = e.target.files[0]; if (f) this._upload(f); },
 
   async _upload(file) {
-    const uploadBlock = document.getElementById('uploadProgress');
-    const statusText  = document.getElementById('uploadStatusText');
-    const pct         = document.getElementById('uploadPct');
-    const bar         = document.getElementById('uploadBar');
+    const block = document.getElementById('uploadProgress');
+    const txt   = document.getElementById('uploadStatusText');
+    const pct   = document.getElementById('uploadPct');
+    const bar   = document.getElementById('uploadBar');
 
-    uploadBlock.classList.remove('hidden');
-    statusText.textContent = `Uploading ${file.name}…`;
+    block.classList.remove('hidden');
+    txt.textContent = `Uploading ${file.name}…`;
 
-    // Fake upload progress (real progress via XHR would need more setup)
-    let fakeProgress = 0;
-    const fakeTimer = setInterval(() => {
-      fakeProgress = Math.min(fakeProgress + 8, 90);
-      bar.style.width  = fakeProgress + '%';
-      pct.textContent  = fakeProgress + '%';
+    let fp = 0;
+    const ft = setInterval(() => {
+      fp = Math.min(fp + 8, 90);
+      bar.style.width = fp + '%';
+      pct.textContent = fp + '%';
     }, 100);
 
     try {
-      const result = await API.upload(file);
-      clearInterval(fakeTimer);
-      bar.style.width = '100%';
-      pct.textContent = '100%';
-      statusText.textContent = '✓ Uploaded — processing started';
-
-      NotificationSystem.success(`"${file.name}" uploaded. Processing started (ID: ${result.video_id})`);
-      AppState.currentVideoId = result.video_id;
-      document.getElementById('resultVideoId').textContent = `#${result.video_id}`;
-
-      setTimeout(() => {
-        uploadBlock.classList.add('hidden');
-        StatusPoller.start(result.video_id);
-      }, 800);
-
+      const res = await API.upload(file);
+      clearInterval(ft);
+      bar.style.width = '100%'; pct.textContent = '100%';
+      txt.textContent = '✓ Uploaded — processing started';
+      Toast.ok(`"${file.name}" uploaded (ID: ${res.video_id})`);
+      AppState.currentVideoId = res.video_id;
+      const badge = document.getElementById('resultVideoId');
+      if (badge) badge.textContent = `#${res.video_id}`;
+      setTimeout(() => { block.classList.add('hidden'); StatusPoller.start(res.video_id); }, 800);
     } catch (err) {
-      clearInterval(fakeTimer);
-      bar.style.width = '100%';
-      bar.style.background = 'var(--accent-red)';
-      statusText.textContent = '✗ Upload failed';
-      NotificationSystem.error(`Upload failed: ${err.message}`);
+      clearInterval(ft);
+      bar.style.width = '100%'; bar.style.background = 'var(--red)';
+      txt.textContent = '✗ Upload failed';
+      Toast.err(`Upload failed: ${err.message}`);
     }
   },
 };
 
 // ── Status Poller ─────────────────────────────────────────────
 const StatusPoller = {
-  start(videoId) {
+  start(id) {
     if (AppState.pollerTimer) clearInterval(AppState.pollerTimer);
-    const procBlock   = document.getElementById('procProgress');
-    const procStatus  = document.getElementById('procStatusText');
-    const procPct     = document.getElementById('procPct');
-    const procBar     = document.getElementById('procBar');
+    const block = document.getElementById('procProgress');
+    const txt   = document.getElementById('procStatusText');
+    const pct   = document.getElementById('procPct');
+    const bar   = document.getElementById('procBar');
 
-    procBlock.classList.remove('hidden');
-    procStatus.textContent = 'Processing…';
+    block.classList.remove('hidden');
+    txt.textContent = 'Processing…';
 
     AppState.pollerTimer = setInterval(async () => {
       try {
-        const data = await API.status(videoId);
-        const progress = Math.min(data.progress || 0, 100);
-        procBar.style.width = progress + '%';
-        procPct.textContent = progress + '%';
-        procStatus.textContent = `${data.status} — ${progress}%`;
+        const d = await API.status(id);
+        const p = Math.min(d.progress || 0, 100);
+        bar.style.width = p + '%';
+        pct.textContent = p + '%';
+        txt.textContent = `${d.status} — ${p}%`;
 
-        if (data.status === 'completed') {
+        if (d.status === 'completed') {
           clearInterval(AppState.pollerTimer);
-          procStatus.textContent = '✓ Completed!';
-          NotificationSystem.success(`Video #${videoId} processing complete!`);
-          await ResultsRenderer.load(videoId);
-          document.getElementById('downloadRow').style.display = 'flex';
-        } else if (data.status === 'failed') {
+          txt.textContent = '✓ Completed!';
+          Toast.ok(`Video #${id} processing complete!`);
+          await ResultsRenderer.load(id);
+          const dr = document.getElementById('downloadRow');
+          if (dr) dr.style.display = 'flex';
+        } else if (d.status === 'failed') {
           clearInterval(AppState.pollerTimer);
-          procStatus.textContent = '✗ Processing failed';
-          NotificationSystem.error(`Video #${videoId} processing failed.`);
+          txt.textContent = '✗ Processing failed';
+          Toast.err(`Video #${id} processing failed.`);
         }
-      } catch { /* silently retry */ }
+      } catch { /* retry */ }
     }, 2000);
+  },
+};
+
+// ── Table Filter / Sort / Search ──────────────────────────────
+const TableFilter = {
+  set(mode) {
+    AppState.filterMode = mode;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    const map = { all:'filterAll', overspeed:'filterOverspeed', normal:'filterNormal' };
+    const btn = document.getElementById(map[mode]);
+    if (btn) btn.classList.add('active');
+    this.apply();
+  },
+
+  sort(key) {
+    if (AppState.sortKey === key) AppState.sortAsc = !AppState.sortAsc;
+    else { AppState.sortKey = key; AppState.sortAsc = true; }
+    this.apply();
+  },
+
+  apply() {
+    let list = [...AppState.allVehicles];
+
+    // Filter by status
+    if (AppState.filterMode === 'overspeed') list = list.filter(v => v.status === 'overspeed');
+    if (AppState.filterMode === 'normal')    list = list.filter(v => v.status !== 'overspeed');
+
+    // Search by plate
+    const q = (document.getElementById('plateSearch')?.value || '').trim().toUpperCase();
+    if (q) list = list.filter(v => (v.plate_number || '').toUpperCase().includes(q));
+
+    // Sort
+    if (AppState.sortKey) {
+      const keyMap = { id:'vehicle_unique_id', type:'vehicle_type', avg:'avg_speed', max:'max_speed' };
+      const k = keyMap[AppState.sortKey];
+      list.sort((a,b) => {
+        const av = a[k], bv = b[k];
+        if (typeof av === 'number') return AppState.sortAsc ? av-bv : bv-av;
+        return AppState.sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+      });
+    }
+
+    this._render(list);
+  },
+
+  _render(vehicles) {
+    const tbody = document.getElementById('vehicleTableBody');
+    if (!vehicles || vehicles.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No vehicles match the current filter.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = vehicles.map(v => {
+      const over = v.status === 'overspeed';
+      const badge = over
+        ? '<span class="badge-overspeed">⚠ Overspeed</span>'
+        : '<span class="badge-normal">✓ Normal</span>';
+      return `<tr class="${over ? 'row-over' : ''}">
+        <td>${v.vehicle_unique_id}</td>
+        <td>${v.vehicle_type}</td>
+        <td>${v.plate_number || '—'}</td>
+        <td>${(v.avg_speed||0).toFixed(1)} km/h</td>
+        <td>${(v.max_speed||0).toFixed(1)} km/h</td>
+        <td>${badge}</td>
+      </tr>`;
+    }).join('');
   },
 };
 
 // ── Results Renderer ──────────────────────────────────────────
 const ResultsRenderer = {
-  async load(videoId) {
+  async load(id) {
     try {
-      const [analytics, vehicles] = await Promise.all([
-        API.results(videoId),
-        API.vehicles(videoId),
-      ]);
-
-      this._fillAnalytics(analytics);
-      this._fillTable(vehicles);
-      StatsAnimator.update(analytics);
+      const [analytics, vehicles] = await Promise.all([API.results(id), API.vehicles(id)]);
+      this._fillCards(analytics);
+      AppState.allVehicles = vehicles || [];
+      TableFilter.apply();
+      updateKPIs(analytics);
     } catch (err) {
-      NotificationSystem.error('Failed to load results: ' + err.message);
+      Toast.err('Failed to load results: ' + err.message);
     }
   },
 
-  _fillAnalytics(a) {
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    set('anaCars',     a.cars || 0);
-    set('anaTrucks',   a.trucks || 0);
-    set('anaBuses',    a.buses || 0);
-    set('anaBikes',    a.bikes || 0);
-    set('anaOverPct',  (a.overspeed_percentage || 0).toFixed(1) + '%');
-    set('anaMaxSpeed', (a.max_speed || 0).toFixed(1) + ' km/h');
-  },
-
-  _fillTable(vehicles) {
-    const tbody = document.getElementById('vehicleTableBody');
-    if (!vehicles || vehicles.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No vehicles detected.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = vehicles.map(v => {
-      const isOver = v.status === 'overspeed';
-      const statusBadge = isOver
-        ? '<span class="status-badge status-overspeed">⚠ Overspeed</span>'
-        : '<span class="status-badge status-normal">✓ Normal</span>';
-      return `
-        <tr class="${isOver ? 'row-overspeed' : ''}">
-          <td>${v.vehicle_unique_id}</td>
-          <td>${v.vehicle_type}</td>
-          <td>${v.plate_number || '—'}</td>
-          <td>${(v.avg_speed || 0).toFixed(1)} km/h</td>
-          <td>${(v.max_speed || 0).toFixed(1)} km/h</td>
-          <td>${statusBadge}</td>
-        </tr>`;
-    }).join('');
+  _fillCards(a) {
+    const s = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    s('anaCars',     a.cars || 0);
+    s('anaTrucks',   a.trucks || 0);
+    s('anaBuses',    a.buses || 0);
+    s('anaBikes',    a.bikes || 0);
+    s('anaOverPct',  (a.overspeed_percentage || 0).toFixed(1) + '%');
+    s('anaMaxSpeed', (a.max_speed || 0).toFixed(1) + ' km/h');
   },
 };
 
@@ -252,11 +265,11 @@ const ResultsRenderer = {
 const HistoryManager = {
   async refresh() {
     const list = document.getElementById('historyList');
-    list.innerHTML = '<p class="muted">Loading…</p>';
+    list.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
       const videos = await API.videos();
-      if (!videos || videos.length === 0) {
-        list.innerHTML = '<p class="muted">No videos processed yet.</p>';
+      if (!videos || !videos.length) {
+        list.innerHTML = '<p class="empty-hint">No videos processed yet.</p>';
         return;
       }
       list.innerHTML = videos.map(v => `
@@ -265,125 +278,94 @@ const HistoryManager = {
             <div class="h-filename">${v.filename}</div>
             <div class="h-meta">${v.upload_time?.split('T')[0] ?? ''} · ${v.total_vehicles ?? 0} vehicles</div>
           </div>
-          <span class="status-badge ${v.status === 'completed' ? 'status-normal' : 'status-overspeed'}">${v.status}</span>
+          <span class="${v.status==='completed'?'badge-normal':'badge-overspeed'}">${v.status}</span>
         </div>`).join('');
     } catch {
-      list.innerHTML = '<p class="muted">Failed to load history.</p>';
+      list.innerHTML = '<p class="empty-hint">Failed to load history.</p>';
     }
   },
 
-  async select(videoId) {
-    AppState.currentVideoId = videoId;
-    document.getElementById('resultVideoId').textContent = `#${videoId}`;
-    TabManager.show('upload');  // Stay on same side while showing results
-    await ResultsRenderer.load(videoId);
-    document.getElementById('downloadRow').style.display = 'flex';
-    NotificationSystem.info(`Loaded results for video #${videoId}`);
+  async select(id) {
+    AppState.currentVideoId = id;
+    const badge = document.getElementById('resultVideoId');
+    if (badge) badge.textContent = `#${id}`;
+    TabManager.show('upload');
+    await ResultsRenderer.load(id);
+    const dr = document.getElementById('downloadRow');
+    if (dr) dr.style.display = 'flex';
+    Toast.info(`Loaded results for video #${id}`);
   },
 };
 
 // ── Camera Manager ────────────────────────────────────────────
 const CameraManager = {
-  streamInterval: null,
-  statsInterval: null,
-  isStreaming: false,
+  _streamTimer: null,
+  _statsTimer:  null,
+  _maxSpeed:    0,
+  isStreaming:  false,
 
   async start() {
     try {
-      const cameraSource = document.getElementById('cameraSource').value || '0';
-      await API.startCamera(cameraSource);
-      const img = document.getElementById('cameraStream');
-      img.classList.remove('hidden');
+      const src = document.getElementById('cameraSource').value || '0';
+      await API.startCamera(src);
+      document.getElementById('cameraStream').classList.remove('hidden');
       document.getElementById('cameraPlaceholder').classList.add('hidden');
       document.getElementById('btnStartCam').disabled = true;
       document.getElementById('btnStopCam').disabled  = false;
-      
       this.isStreaming = true;
-      this.startPolling();
-      this.startStatsPolling();
-      NotificationSystem.success('Camera stream started: ' + cameraSource);
-    } catch (err) {
-      NotificationSystem.error('Failed to start camera: ' + err.message);
-    }
+      this._startFramePolling();
+      this._startStatsPolling();
+      Toast.ok('Camera started: ' + src);
+    } catch (err) { Toast.err('Camera failed: ' + err.message); }
   },
 
-  startPolling() {
-    if (this.streamInterval) clearInterval(this.streamInterval);
-    this.streamInterval = setInterval(async () => {
+  _startFramePolling() {
+    if (this._streamTimer) clearInterval(this._streamTimer);
+    this._streamTimer = setInterval(async () => {
       if (!this.isStreaming) return;
       try {
-        const response = await fetch('/api/camera/frame?t=' + Date.now());
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
-          const img = document.getElementById('cameraStream');
-          img.src = url;
+        const r = await fetch('/api/camera/frame?t=' + Date.now());
+        if (r.ok) {
+          const blob = await r.blob();
+          document.getElementById('cameraStream').src = URL.createObjectURL(blob);
         }
-      } catch (err) {
-        console.error('Stream polling error:', err);
-      }
-    }, 50); // Poll every 50ms for ~20fps updates
+      } catch {}
+    }, 50);
   },
 
-  startStatsPolling() {
-    if (this.statsInterval) clearInterval(this.statsInterval);
-    this.statsInterval = setInterval(async () => {
+  _startStatsPolling() {
+    if (this._statsTimer) clearInterval(this._statsTimer);
+    this._statsTimer = setInterval(async () => {
       if (!this.isStreaming) return;
       try {
-        const response = await API.cameraStats();
-        if (response.data) {
-          const s = response.data;
-          // Update top stat cards
-          StatsAnimator.update({
-            total_vehicles:    s.total_vehicles    || 0,
-            avg_speed:         s.avg_speed         || 0,
-            overspeed_count:   s.overspeed_count   || 0,
-            plates_detected:   s.plates_detected   || 0,
-          });
-          // Update analysis result cards
-          const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-          set('anaCars',     s.cars    || 0);
-          set('anaTrucks',   s.trucks  || 0);
-          set('anaBuses',    s.buses   || 0);
-          set('anaBikes',    s.bikes   || 0);
-          set('anaOverPct',  s.total_vehicles > 0
-            ? ((s.overspeed_count / s.total_vehicles) * 100).toFixed(1) + '%'
-            : '0.0%');
-          // Max speed: track it ourselves since API gives avg
-          if (s.avg_speed > (CameraManager._maxSpeed || 0)) {
-            CameraManager._maxSpeed = s.avg_speed;
-          }
-          set('anaMaxSpeed', (CameraManager._maxSpeed || 0).toFixed(1) + ' km/h');
-        }
-      } catch (err) {
-        console.error('Stats polling error:', err);
-      }
+        const r = await API.cameraStats();
+        if (!r.data) return;
+        const s = r.data;
+        updateKPIs({ total_vehicles: s.total_vehicles||0, avg_speed: s.avg_speed||0, overspeed_count: s.overspeed_count||0, plates_detected: s.plates_detected||0 });
+        const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+        set('anaCars',    s.cars||0);
+        set('anaTrucks',  s.trucks||0);
+        set('anaBuses',   s.buses||0);
+        set('anaBikes',   s.bikes||0);
+        set('anaOverPct', s.total_vehicles>0 ? ((s.overspeed_count/s.total_vehicles)*100).toFixed(1)+'%' : '0.0%');
+        if ((s.avg_speed||0) > this._maxSpeed) this._maxSpeed = s.avg_speed;
+        set('anaMaxSpeed', this._maxSpeed.toFixed(1)+' km/h');
+      } catch {}
     }, 500);
   },
 
   async stop() {
-    try {
-      this.isStreaming = false;
-      this._maxSpeed = 0;
-      if (this.streamInterval) {
-        clearInterval(this.streamInterval);
-        this.streamInterval = null;
-      }
-      if (this.statsInterval) {
-        clearInterval(this.statsInterval);
-        this.statsInterval = null;
-      }
-      await API.stopCamera();
-      const img = document.getElementById('cameraStream');
-      img.src = '';
-      img.classList.add('hidden');
-      document.getElementById('cameraPlaceholder').classList.remove('hidden');
-      document.getElementById('btnStartCam').disabled = false;
-      document.getElementById('btnStopCam').disabled  = true;
-      NotificationSystem.info('Camera stream stopped.');
-    } catch (err) {
-      NotificationSystem.error('Failed to stop camera: ' + err.message);
-    }
+    this.isStreaming = false;
+    this._maxSpeed = 0;
+    [this._streamTimer, this._statsTimer].forEach(t => { if(t) clearInterval(t); });
+    this._streamTimer = this._statsTimer = null;
+    await API.stopCamera();
+    const img = document.getElementById('cameraStream');
+    img.src = ''; img.classList.add('hidden');
+    document.getElementById('cameraPlaceholder').classList.remove('hidden');
+    document.getElementById('btnStartCam').disabled = false;
+    document.getElementById('btnStopCam').disabled  = true;
+    Toast.info('Camera stopped.');
   },
 };
 
@@ -391,80 +373,71 @@ const CameraManager = {
 const Downloader = {
   excel() {
     const id = AppState.currentVideoId;
-    if (!id) { NotificationSystem.error('No video selected.'); return; }
+    if (!id) { Toast.err('No video selected.'); return; }
     window.open(`/api/download/excel/${id}`, '_blank');
   },
   video() {
     const id = AppState.currentVideoId;
-    if (!id) { NotificationSystem.error('No video selected.'); return; }
+    if (!id) { Toast.err('No video selected.'); return; }
     window.open(`/api/download/video/${id}`, '_blank');
+  },
+};
+
+// ── Model Metrics ─────────────────────────────────────────────
+const MetricsUI = {
+  showChart(name) {
+    document.querySelectorAll('.chart-img').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.ctab').forEach(b => b.classList.remove('active'));
+    const map    = { results:'chartResults', loss:'chartLoss', map:'chartMap', pr:'chartPr' };
+    const tabMap = { results:'ctabResults',  loss:'ctabLoss',  map:'ctabMap',  pr:'ctabPr'  };
+    document.getElementById(map[name])?.classList.add('active');
+    document.getElementById(tabMap[name])?.classList.add('active');
+  },
+
+  async load() {
+    try {
+      const d = await (await fetch('/api/model-metrics')).json();
+      if (!d.available) return;
+      const badge = document.getElementById('metricsBestEpoch');
+      if (badge) badge.textContent = `Best: Epoch ${d.best_epoch} / ${d.total_epochs}`;
+      const b = d.best;
+      [
+        ['mPrecision','mPrecisionBar', b.precision],
+        ['mRecall',   'mRecallBar',    b.recall],
+        ['mMap50',    'mMap50Bar',     b.mAP50],
+        ['mMap5095',  'mMap5095Bar',   b.mAP50_95],
+      ].forEach(([vid, bid, val]) => {
+        const el  = document.getElementById(vid);
+        const bar = document.getElementById(bid);
+        if (el)  el.textContent = (val*100).toFixed(1) + '%';
+        if (bar) setTimeout(() => bar.style.width = (val*100).toFixed(1)+'%', 300);
+      });
+    } catch (e) { console.warn('Metrics load failed:', e.message); }
   },
 };
 
 // ── Init ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Verify API is live
-  fetch('/api/health').then(r => r.json()).then(d => {
+  // Health check
+  fetch('/api/health').then(r=>r.json()).then(d => {
+    const el = document.getElementById('systemStatus');
+    if (!el) return;
     if (d.status === 'ok') {
-      document.getElementById('systemStatus').textContent = '● ONLINE';
+      el.querySelector('.status-text').textContent = 'ONLINE';
+    } else {
+      el.querySelector('.status-dot').style.background = 'var(--red)';
+      el.querySelector('.status-text').textContent = 'OFFLINE';
+      el.style.color = 'var(--red)';
     }
   }).catch(() => {
-    document.getElementById('systemStatus').textContent = '● OFFLINE';
-    document.getElementById('systemStatus').style.color = 'var(--accent-red)';
-  });
-});
-
-
-// ── Model Metrics UI ──────────────────────────────────────────
-const MetricsUI = {
-  showChart(name) {
-    // Hide all charts
-    document.querySelectorAll('.chart-img').forEach(img => img.classList.remove('active'));
-    document.querySelectorAll('.chart-tab-btn').forEach(btn => btn.classList.remove('active'));
-
-    const map = { results: 'chartResults', loss: 'chartLoss', map: 'chartMap', pr: 'chartPr' };
-    const tabMap = { results: 'ctabResults', loss: 'ctabLoss', map: 'ctabMap', pr: 'ctabPr' };
-
-    const img = document.getElementById(map[name]);
-    const btn = document.getElementById(tabMap[name]);
-    if (img) img.classList.add('active');
-    if (btn) btn.classList.add('active');
-  },
-
-  async load() {
-    try {
-      const resp = await fetch('/api/model-metrics');
-      const data = await resp.json();
-      if (!data.available) return;
-
-      const best = data.best;
-
-      // Update badge
-      const badge = document.getElementById('metricsBestEpoch');
-      if (badge) badge.textContent = `Best: Epoch ${data.best_epoch} / ${data.total_epochs}`;
-
-      // Animate metric cards
-      const metrics = [
-        { valId: 'mPrecision', barId: 'mPrecisionBar', val: best.precision },
-        { valId: 'mRecall',    barId: 'mRecallBar',    val: best.recall    },
-        { valId: 'mMap50',     barId: 'mMap50Bar',     val: best.mAP50     },
-        { valId: 'mMap5095',   barId: 'mMap5095Bar',   val: best.mAP50_95  },
-      ];
-
-      metrics.forEach(({ valId, barId, val }) => {
-        const el  = document.getElementById(valId);
-        const bar = document.getElementById(barId);
-        if (el)  el.textContent = (val * 100).toFixed(1) + '%';
-        if (bar) setTimeout(() => bar.style.width = (val * 100).toFixed(1) + '%', 200);
-      });
-
-    } catch (err) {
-      console.warn('Could not load model metrics:', err.message);
+    const el = document.getElementById('systemStatus');
+    if (el) {
+      el.querySelector('.status-dot').style.background = 'var(--red)';
+      el.querySelector('.status-text').textContent = 'OFFLINE';
+      el.style.color = 'var(--red)';
     }
-  },
-};
+  });
 
-// Load metrics on page ready
-document.addEventListener('DOMContentLoaded', () => {
+  // Load model metrics
   MetricsUI.load();
 });

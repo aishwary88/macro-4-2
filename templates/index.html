@@ -3,75 +3,102 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SentrySpeed — Traffic Analyzer</title>
-  <meta name="description" content="AI-powered traffic analysis: vehicle detection, speed estimation, and license plate recognition with real-time insights." />
+  <title>SentrySpeed — AI Traffic Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
-  <!-- ─── PARTICLES ─────────────────────────────────────────── -->
-  <div id="particles" aria-hidden="true"></div>
 
-  <!-- ─── HEADER ───────────────────────────────────────────── -->
-  <header class="header">
-    <div class="header-inner">
-      <div class="brand">
-        <span class="brand-icon">🚦</span>
-        <span class="brand-name">SentrySpeed</span>
-        <span class="brand-tag">v2.0</span>
+  <!-- ═══ NAVBAR ═══════════════════════════════════════════════ -->
+  <header class="navbar">
+    <div class="navbar-inner">
+      <div class="nav-brand">
+        <div class="nav-logo">
+          <span class="logo-icon">🚦</span>
+          <div>
+            <span class="logo-name">SentrySpeed</span>
+            <span class="logo-ver">v2.0</span>
+          </div>
+        </div>
+        <div class="nav-divider"></div>
+        <span class="nav-tagline">AI Traffic Analyzer</span>
       </div>
-      <div class="header-badges">
-        <span class="badge badge-live" id="systemStatus">● ONLINE</span>
-        <span class="badge badge-info" id="dbBadge">DB Ready</span>
+      <div class="nav-actions">
+        <div class="nav-status" id="systemStatus">
+          <span class="status-dot"></span>
+          <span class="status-text">ONLINE</span>
+        </div>
+        <button class="nav-btn" onclick="TabManager.show('upload')">📤 Upload</button>
+        <button class="nav-btn nav-btn-primary" onclick="TabManager.show('camera')">📷 Live Camera</button>
       </div>
     </div>
   </header>
 
-  <!-- ─── STATS ROW ─────────────────────────────────────────── -->
-  <section class="stats-row" aria-label="Summary statistics">
-    <div class="stat-card" id="statTotalVehicles">
-      <div class="stat-icon">🚗</div>
-      <div class="stat-value" id="totalVehiclesVal">0</div>
-      <div class="stat-label">Total Vehicles</div>
-    </div>
-    <div class="stat-card" id="statAvgSpeed">
-      <div class="stat-icon">⚡</div>
-      <div class="stat-value" id="avgSpeedVal">0</div>
-      <div class="stat-label">Avg Speed (km/h)</div>
-    </div>
-    <div class="stat-card" id="statPlates">
-      <div class="stat-icon">🔢</div>
-      <div class="stat-value" id="platesVal">0</div>
-      <div class="stat-label">Plates Detected</div>
-    </div>
-    <div class="stat-card stat-danger" id="statOverspeed">
-      <div class="stat-icon">⚠️</div>
-      <div class="stat-value" id="overspeedVal">0</div>
-      <div class="stat-label">Overspeed Events</div>
+  <!-- ═══ KPI CARDS ════════════════════════════════════════════ -->
+  <section class="kpi-section">
+    <div class="kpi-grid">
+
+      <div class="kpi-card kpi-vehicles">
+        <div class="kpi-left">
+          <div class="kpi-icon-wrap kpi-icon-blue">🚗</div>
+          <div>
+            <div class="kpi-value" id="totalVehiclesVal">0</div>
+            <div class="kpi-label">Total Vehicles</div>
+          </div>
+        </div>
+        <div class="kpi-glow kpi-glow-blue"></div>
+      </div>
+
+      <div class="kpi-card kpi-speed">
+        <div class="kpi-left">
+          <div class="kpi-icon-wrap kpi-icon-cyan">⚡</div>
+          <div>
+            <div class="kpi-value" id="avgSpeedVal">0</div>
+            <div class="kpi-label">Avg Speed (km/h)</div>
+          </div>
+        </div>
+        <div class="kpi-glow kpi-glow-cyan"></div>
+      </div>
+
+      <div class="kpi-card kpi-plates">
+        <div class="kpi-left">
+          <div class="kpi-icon-wrap kpi-icon-purple">🔢</div>
+          <div>
+            <div class="kpi-value" id="platesVal">0</div>
+            <div class="kpi-label">Plates Detected</div>
+          </div>
+        </div>
+        <div class="kpi-glow kpi-glow-purple"></div>
+      </div>
+
+      <div class="kpi-card kpi-overspeed">
+        <div class="kpi-left">
+          <div class="kpi-icon-wrap kpi-icon-red">🚨</div>
+          <div>
+            <div class="kpi-value kpi-danger" id="overspeedVal">0</div>
+            <div class="kpi-label">Overspeed Events</div>
+          </div>
+        </div>
+        <div class="kpi-glow kpi-glow-red"></div>
+      </div>
+
     </div>
   </section>
 
-  <!-- ─── MAIN CONTENT ──────────────────────────────────────── -->
-  <main class="main-content">
+  <!-- ═══ MAIN SPLIT ═══════════════════════════════════════════ -->
+  <main class="main-split">
 
-    <!-- Left Panel: Tabs -->
-    <div class="panel panel-left">
+    <!-- ── LEFT: Input Panel ─────────────────────────────────── -->
+    <aside class="input-panel">
 
-      <!-- Tab Nav -->
       <nav class="tab-nav" role="tablist">
-        <button class="tab-btn active" id="tabUpload" role="tab" aria-selected="true" aria-controls="panelUpload" onclick="TabManager.show('upload')">
-          📤 Upload Video
-        </button>
-        <button class="tab-btn" id="tabCamera" role="tab" aria-selected="false" aria-controls="panelCamera" onclick="TabManager.show('camera')">
-          📷 Live Camera
-        </button>
-        <button class="tab-btn" id="tabHistory" role="tab" aria-selected="false" aria-controls="panelHistory" onclick="TabManager.show('history')">
-          📋 History
-        </button>
+        <button class="tab-btn active" id="tabUpload"  onclick="TabManager.show('upload')"  role="tab" aria-selected="true">📤 Upload</button>
+        <button class="tab-btn"        id="tabCamera"  onclick="TabManager.show('camera')"  role="tab" aria-selected="false">📷 Camera</button>
+        <button class="tab-btn"        id="tabHistory" onclick="TabManager.show('history')" role="tab" aria-selected="false">📋 History</button>
       </nav>
 
-      <!-- Upload Panel -->
+      <!-- Upload Tab -->
       <div class="tab-panel active" id="panelUpload" role="tabpanel">
         <div class="drop-zone" id="dropZone"
              ondragover="FileUploader.onDragOver(event)"
@@ -80,183 +107,215 @@
              onclick="document.getElementById('fileInput').click()">
           <div class="drop-icon">📁</div>
           <p class="drop-title">Drop video here or click to browse</p>
-          <p class="drop-hint">Supported: MP4, AVI, MOV, MKV — max 2GB</p>
+          <p class="drop-hint">MP4 · AVI · MOV · MKV — max 2GB</p>
           <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none" onchange="FileUploader.onFileSelect(event)" />
         </div>
 
-        <!-- Upload Progress -->
         <div class="progress-block hidden" id="uploadProgress">
-          <div class="progress-label">
+          <div class="progress-header">
             <span id="uploadStatusText">Uploading…</span>
-            <span id="uploadPct">0%</span>
+            <span class="progress-pct" id="uploadPct">0%</span>
           </div>
-          <div class="progress-bar-track">
-            <div class="progress-bar-fill" id="uploadBar"></div>
-          </div>
+          <div class="progress-track"><div class="progress-fill" id="uploadBar"></div></div>
         </div>
 
-        <!-- Processing Progress -->
         <div class="progress-block hidden" id="procProgress">
-          <div class="progress-label">
+          <div class="progress-header">
             <span id="procStatusText">Processing…</span>
-            <span id="procPct">0%</span>
+            <span class="progress-pct" id="procPct">0%</span>
           </div>
-          <div class="progress-bar-track">
-            <div class="progress-bar-fill glow" id="procBar"></div>
-          </div>
+          <div class="progress-track"><div class="progress-fill progress-glow" id="procBar"></div></div>
         </div>
       </div>
 
-      <!-- Camera Panel -->
+      <!-- Camera Tab -->
       <div class="tab-panel" id="panelCamera" role="tabpanel">
-        <div class="camera-controls">
-          <div class="control-group">
-            <label for="cameraSource">Camera Source:</label>
-            <input type="text" id="cameraSource" placeholder="0 (or http://192.168.1.x:8080/video)" value="0" />
-            <small>Use 0 for laptop camera, or paste your phone camera URL</small>
-          </div>
-          <button class="btn btn-primary" id="btnStartCam" onclick="CameraManager.start()">▶ Start Camera</button>
-          <button class="btn btn-danger" id="btnStopCam" onclick="CameraManager.stop()" disabled>■ Stop</button>
+        <div class="cam-source-row">
+          <label class="field-label">Camera Source</label>
+          <input class="field-input" type="text" id="cameraSource" placeholder="0  or  http://192.168.x.x:8080/video" value="0" />
+          <small class="field-hint">0 = laptop webcam · URL = phone camera</small>
         </div>
-        <div class="camera-frame" id="cameraFrame">
-          <img id="cameraStream" src="" alt="Live camera feed" class="hidden" />
-          <div class="camera-placeholder" id="cameraPlaceholder">
+        <div class="cam-btn-row">
+          <button class="btn btn-green" id="btnStartCam" onclick="CameraManager.start()">▶ Start</button>
+          <button class="btn btn-red"   id="btnStopCam"  onclick="CameraManager.stop()" disabled>■ Stop</button>
+        </div>
+        <div class="cam-frame" id="cameraFrame">
+          <img id="cameraStream" src="" alt="Live feed" class="hidden" />
+          <div class="cam-placeholder" id="cameraPlaceholder">
+            <span class="cam-placeholder-icon">📷</span>
             <span>Camera inactive</span>
           </div>
         </div>
       </div>
 
-      <!-- History Panel -->
+      <!-- History Tab -->
       <div class="tab-panel" id="panelHistory" role="tabpanel">
-        <button class="btn btn-secondary btn-sm" onclick="HistoryManager.refresh()">↻ Refresh</button>
+        <div class="history-toolbar">
+          <span class="section-label">Recent Videos</span>
+          <button class="btn btn-ghost btn-sm" onclick="HistoryManager.refresh()">↻ Refresh</button>
+        </div>
         <div id="historyList" class="history-list">
-          <p class="muted">No videos processed yet.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right Panel: Results -->
-    <div class="panel panel-right" id="resultsPanel">
-      <h2 class="panel-title">
-        Analysis Results
-        <span class="panel-title-badge" id="resultVideoId"></span>
-      </h2>
-
-      <!-- Analytics cards -->
-      <div class="analytics-grid" id="analyticsGrid">
-        <div class="ana-card">
-          <span class="ana-label">Cars</span>
-          <span class="ana-value" id="anaCars">—</span>
-        </div>
-        <div class="ana-card">
-          <span class="ana-label">Trucks</span>
-          <span class="ana-value" id="anaTrucks">—</span>
-        </div>
-        <div class="ana-card">
-          <span class="ana-label">Buses</span>
-          <span class="ana-value" id="anaBuses">—</span>
-        </div>
-        <div class="ana-card">
-          <span class="ana-label">Bikes</span>
-          <span class="ana-value" id="anaBikes">—</span>
-        </div>
-        <div class="ana-card ana-danger">
-          <span class="ana-label">Overspeed %</span>
-          <span class="ana-value" id="anaOverPct">—</span>
-        </div>
-        <div class="ana-card">
-          <span class="ana-label">Max Speed</span>
-          <span class="ana-value" id="anaMaxSpeed">—</span>
+          <p class="empty-hint">No videos processed yet.</p>
         </div>
       </div>
 
-      <!-- Download buttons -->
-      <div class="download-row" id="downloadRow" style="display:none">
-        <button class="btn btn-primary" id="btnDownloadExcel" onclick="Downloader.excel()">
-          📊 Download Excel
-        </button>
-        <button class="btn btn-secondary" id="btnDownloadVideo" onclick="Downloader.video()">
-          🎬 Download Video
-        </button>
+    </aside>
+
+    <!-- ── RIGHT: Results Panel ──────────────────────────────── -->
+    <section class="results-panel">
+
+      <!-- Results Header -->
+      <div class="results-header">
+        <div class="results-title-row">
+          <h2 class="results-title">Analysis Results</h2>
+          <span class="results-badge" id="resultVideoId"></span>
+        </div>
+        <div class="download-row" id="downloadRow" style="display:none">
+          <button class="btn btn-primary" onclick="Downloader.excel()">📊 Excel</button>
+          <button class="btn btn-ghost"   onclick="Downloader.video()">🎬 Video</button>
+        </div>
       </div>
 
-      <!-- Vehicle table -->
-      <div class="table-wrapper" id="tableWrapper">
-        <table class="vehicle-table" id="vehicleTable">
+      <!-- Vehicle Type Breakdown -->
+      <div class="type-grid">
+        <div class="type-card">
+          <span class="type-icon">🚗</span>
+          <span class="type-val" id="anaCars">—</span>
+          <span class="type-lbl">Cars</span>
+        </div>
+        <div class="type-card">
+          <span class="type-icon">🚛</span>
+          <span class="type-val" id="anaTrucks">—</span>
+          <span class="type-lbl">Trucks</span>
+        </div>
+        <div class="type-card">
+          <span class="type-icon">🚌</span>
+          <span class="type-val" id="anaBuses">—</span>
+          <span class="type-lbl">Buses</span>
+        </div>
+        <div class="type-card">
+          <span class="type-icon">🏍️</span>
+          <span class="type-val" id="anaBikes">—</span>
+          <span class="type-lbl">Bikes</span>
+        </div>
+        <div class="type-card type-danger">
+          <span class="type-icon">⚠️</span>
+          <span class="type-val" id="anaOverPct">—</span>
+          <span class="type-lbl">Overspeed %</span>
+        </div>
+        <div class="type-card type-speed">
+          <span class="type-icon">🏁</span>
+          <span class="type-val" id="anaMaxSpeed">—</span>
+          <span class="type-lbl">Max Speed</span>
+        </div>
+      </div>
+
+      <!-- Table Toolbar: Search + Filter -->
+      <div class="table-toolbar">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input class="search-input" id="plateSearch" type="text" placeholder="Search by plate number…" oninput="TableFilter.apply()" />
+        </div>
+        <div class="filter-btns">
+          <button class="filter-btn active" id="filterAll"       onclick="TableFilter.set('all')">All</button>
+          <button class="filter-btn"        id="filterOverspeed" onclick="TableFilter.set('overspeed')">🔴 Overspeed</button>
+          <button class="filter-btn"        id="filterNormal"    onclick="TableFilter.set('normal')">🟢 Normal</button>
+        </div>
+      </div>
+
+      <!-- Vehicle Table -->
+      <div class="table-wrap">
+        <table class="vtable">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Type</th>
+              <th onclick="TableFilter.sort('id')"      class="sortable">ID ↕</th>
+              <th onclick="TableFilter.sort('type')"    class="sortable">Type ↕</th>
               <th>Plate</th>
-              <th>Avg Speed</th>
-              <th>Max Speed</th>
+              <th onclick="TableFilter.sort('avg')"     class="sortable">Avg Speed ↕</th>
+              <th onclick="TableFilter.sort('max')"     class="sortable">Max Speed ↕</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody id="vehicleTableBody">
-            <tr><td colspan="6" class="empty-row">No results yet. Upload a video to begin.</td></tr>
+            <tr><td colspan="6" class="empty-row">No results yet — upload a video to begin.</td></tr>
           </tbody>
         </table>
       </div>
-    </div>
 
+    </section>
   </main>
 
-  </main>
+  <!-- ═══ MODEL PERFORMANCE ════════════════════════════════════ -->
+  <section class="model-section">
+    <div class="model-section-inner">
 
-  <!-- ─── MODEL PERFORMANCE SECTION ───────────────────────── -->
-  <section class="metrics-section" id="metricsSection" aria-label="Model Performance">
-    <div class="metrics-header">
-      <h2 class="metrics-title">📊 Model Performance <span class="metrics-subtitle">— Plate Detector (YOLOv8n)</span></h2>
-      <span class="metrics-badge" id="metricsBestEpoch"></span>
-    </div>
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">📊 Model Performance</h2>
+          <p class="section-sub">YOLOv8n Plate Detector — Training Results</p>
+        </div>
+        <span class="epoch-badge" id="metricsBestEpoch"></span>
+      </div>
 
-    <!-- Metric Cards Row -->
-    <div class="metrics-cards" id="metricsCards">
-      <div class="metric-card">
-        <div class="metric-icon">🎯</div>
-        <div class="metric-value" id="mPrecision">—</div>
-        <div class="metric-label">Precision</div>
-        <div class="metric-bar-track"><div class="metric-bar-fill" id="mPrecisionBar" style="width:0%;background:#06b6d4"></div></div>
+      <!-- Model KPI Cards -->
+      <div class="model-kpi-grid">
+        <div class="model-kpi">
+          <div class="mkpi-top">
+            <span class="mkpi-icon">🎯</span>
+            <span class="mkpi-val" id="mPrecision">—</span>
+          </div>
+          <div class="mkpi-label">Precision</div>
+          <div class="mkpi-track"><div class="mkpi-fill mkpi-cyan"  id="mPrecisionBar"></div></div>
+        </div>
+        <div class="model-kpi">
+          <div class="mkpi-top">
+            <span class="mkpi-icon">🔍</span>
+            <span class="mkpi-val" id="mRecall">—</span>
+          </div>
+          <div class="mkpi-label">Recall</div>
+          <div class="mkpi-track"><div class="mkpi-fill mkpi-green" id="mRecallBar"></div></div>
+        </div>
+        <div class="model-kpi model-kpi-star">
+          <div class="mkpi-top">
+            <span class="mkpi-icon">⭐</span>
+            <span class="mkpi-val" id="mMap50">—</span>
+          </div>
+          <div class="mkpi-label">mAP@50</div>
+          <div class="mkpi-track"><div class="mkpi-fill mkpi-purple" id="mMap50Bar"></div></div>
+        </div>
+        <div class="model-kpi">
+          <div class="mkpi-top">
+            <span class="mkpi-icon">📐</span>
+            <span class="mkpi-val" id="mMap5095">—</span>
+          </div>
+          <div class="mkpi-label">mAP@50-95</div>
+          <div class="mkpi-track"><div class="mkpi-fill mkpi-orange" id="mMap5095Bar"></div></div>
+        </div>
       </div>
-      <div class="metric-card">
-        <div class="metric-icon">🔍</div>
-        <div class="metric-value" id="mRecall">—</div>
-        <div class="metric-label">Recall</div>
-        <div class="metric-bar-track"><div class="metric-bar-fill" id="mRecallBar" style="width:0%;background:#22c55e"></div></div>
-      </div>
-      <div class="metric-card metric-highlight">
-        <div class="metric-icon">⭐</div>
-        <div class="metric-value" id="mMap50">—</div>
-        <div class="metric-label">mAP@50</div>
-        <div class="metric-bar-track"><div class="metric-bar-fill" id="mMap50Bar" style="width:0%;background:#a855f7"></div></div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-icon">📐</div>
-        <div class="metric-value" id="mMap5095">—</div>
-        <div class="metric-label">mAP@50-95</div>
-        <div class="metric-bar-track"><div class="metric-bar-fill" id="mMap5095Bar" style="width:0%;background:#f97316"></div></div>
-      </div>
-    </div>
 
-    <!-- Chart Tabs -->
-    <div class="chart-tabs">
-      <button class="chart-tab-btn active" onclick="MetricsUI.showChart('results')"    id="ctabResults">All Metrics</button>
-      <button class="chart-tab-btn"        onclick="MetricsUI.showChart('loss')"       id="ctabLoss">Loss Curve</button>
-      <button class="chart-tab-btn"        onclick="MetricsUI.showChart('map')"        id="ctabMap">mAP Curve</button>
-      <button class="chart-tab-btn"        onclick="MetricsUI.showChart('pr')"         id="ctabPr">Precision / Recall</button>
-    </div>
+      <!-- Chart Tabs + Images -->
+      <div class="chart-tabs">
+        <button class="ctab active" id="ctabResults" onclick="MetricsUI.showChart('results')">All Metrics</button>
+        <button class="ctab"        id="ctabLoss"    onclick="MetricsUI.showChart('loss')">Loss Curve</button>
+        <button class="ctab"        id="ctabMap"     onclick="MetricsUI.showChart('map')">mAP Curve</button>
+        <button class="ctab"        id="ctabPr"      onclick="MetricsUI.showChart('pr')">Precision / Recall</button>
+      </div>
+      <div class="chart-box">
+        <img id="chartResults" src="/static/metrics/results.png"          class="chart-img active" alt="All metrics" />
+        <img id="chartLoss"    src="/static/metrics/loss_curve.png"       class="chart-img"        alt="Loss curve" />
+        <img id="chartMap"     src="/static/metrics/map_curve.png"        class="chart-img"        alt="mAP curve" />
+        <img id="chartPr"      src="/static/metrics/precision_recall.png" class="chart-img"        alt="Precision Recall" />
+      </div>
 
-    <!-- Chart Images -->
-    <div class="chart-container">
-      <img id="chartResults"  src="/static/metrics/results.png"           class="chart-img active" alt="Training results" />
-      <img id="chartLoss"     src="/static/metrics/loss_curve.png"        class="chart-img"        alt="Loss curve" />
-      <img id="chartMap"      src="/static/metrics/map_curve.png"         class="chart-img"        alt="mAP curve" />
-      <img id="chartPr"       src="/static/metrics/precision_recall.png"  class="chart-img"        alt="Precision Recall" />
     </div>
   </section>
 
-  <!-- ─── NOTIFICATION TOAST ────────────────────────────────── -->
+  <!-- ═══ FOOTER ═══════════════════════════════════════════════ -->
+  <footer class="footer">
+    <span>SentrySpeed v2.0 · AI-Powered Traffic Analysis · YOLOv8 + ByteTrack + EasyOCR</span>
+  </footer>
+
+  <!-- Toast -->
   <div id="toastContainer" aria-live="polite"></div>
 
   <script src="/static/js/app.js"></script>
